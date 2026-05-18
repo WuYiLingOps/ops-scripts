@@ -6,7 +6,7 @@
 #Date:             2026-05-14
 #FileName:         ssh-keygen-automated.sh
 #URL:              https://script.huangjingblog.cn
-#Description:      免交互 SSH 密钥生成与分发脚本
+#Description:      免交互 SSH 密钥生成与分发脚本（生产环境慎用）
 #Copyright (C):    2026 All rights reserved
 #********************************************************************
 
@@ -20,7 +20,7 @@ KEY_TYPE="rsa"
 KEY_BITS="2048"
 KEY_FILE="$HOME/.ssh/id_rsa"
 
-# 集群节点 IP
+# 设置默认集群节点 IP
 NODES=(
     "10.0.0.202"
     "10.0.0.203"
