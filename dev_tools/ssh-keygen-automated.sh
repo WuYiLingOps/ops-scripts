@@ -38,7 +38,7 @@ NODE_PASSWORD=""
 MUTUAL_MODE=false
 
 # 自动检测模式：-a 参数开启，默认为 false（使用手动配置的 NODES）
-AUTO_DETECT=false
+AUTO_DETECT=true
 
 # ==================== 颜色与日志 ====================
 RED='\033[0;31m'
