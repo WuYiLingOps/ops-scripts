@@ -66,6 +66,25 @@ show_progress() {
     if [ "${current}" -eq "${total}" ]; then echo "" >&2; fi
 }
 
+# spin_loading 显示旋转加载动画
+# @param $1 后台进程 PID
+# @param $2 提示文本
+# 进程结束后自动清除动画并换行
+spin_loading() {
+    local pid="$1" msg="$2"
+    local spin_chars='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+    local i=0
+    while kill -0 "${pid}" 2>/dev/null; do
+        local char="${spin_chars:i++%${#spin_chars}:1}"
+        printf "\r  ${GREEN}%s${NC} %s" "${char}" "${msg}" >&2
+        sleep 0.1
+    done
+    wait "${pid}"
+    local exit_code=$?
+    printf "\r\033[K" >&2
+    return ${exit_code}
+}
+
 # ==================== 前置依赖检查 ====================
 # get_os_id 从 /etc/os-release 获取系统 ID
 # @return 输出系统 ID（小写），如 debian、ubuntu、centos 等
@@ -107,18 +126,62 @@ get_pkg_manager() {
     esac
 }
 
+# install_sshpass 自动安装 sshpass
+# 根据系统类型使用对应的包管理器安装
+# @return 0 安装成功, 1 安装失败
+install_sshpass() {
+    log_info "正在安装 sshpass..."
+    local os_id
+    os_id=$(get_os_id)
+
+    _do_install() {
+        case "${os_id}" in
+            debian|ubuntu|linuxmint|pop)
+                # 等待 apt 锁释放（可能被 unattended-upgr 占用）
+                local timeout=60
+                while fuser /var/lib/dpkg/lock-frontend &>/dev/null 2>&1; do
+                    timeout=$((timeout - 1))
+                    [ ${timeout} -le 0 ] && { log_error "等待 apt 锁超时"; return 1; }
+                    sleep 1
+                done
+                sudo apt-get update -qq &>/dev/null && sudo apt-get install -y -qq sshpass &>/dev/null
+                ;;
+            centos|rhel|rocky|alma|ol)
+                sudo yum install -y -q sshpass &>/dev/null
+                ;;
+            fedora)
+                sudo dnf install -y -q sshpass &>/dev/null
+                ;;
+            arch|manjaro)
+                sudo pacman -S --noconfirm sshpass &>/dev/null
+                ;;
+            alpine)
+                sudo apk add sshpass &>/dev/null
+                ;;
+            *)
+                log_error "不支持的系统类型: ${os_id}，请手动安装 sshpass"
+                return 1
+                ;;
+        esac
+    }
+
+    _do_install &
+    if ! spin_loading $! "安装中，请稍候..."; then
+        log_error "sshpass 安装失败，请手动安装"
+        return 1
+    fi
+    log_info "sshpass 安装成功"
+    return 0
+}
+
 # check_deps 检查脚本运行所需的依赖程序
 # @return 无返回值，依赖缺失时直接退出
 check_deps() {
     if ! command -v sshpass &>/dev/null; then
-        local install_cmd
-        install_cmd=$(get_pkg_manager)
-        if [ -z "${install_cmd}" ]; then
-            log_error "sshpass 未安装，且无法检测系统类型，请手动安装"
-        else
-            log_error "sshpass 未安装，请先执行: ${install_cmd}"
+        log_warn "sshpass 未安装，尝试自动安装..."
+        if ! install_sshpass; then
+            exit 1
         fi
-        exit 1
     fi
 }
 
