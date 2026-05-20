@@ -193,9 +193,11 @@ install_kubeadm () {
     #安装指定版本
      apt install -y  kubeadm=${KUBE_RELEASE} kubelet=${KUBE_RELEASE} kubectl=${KUBE_RELEASE}
     [ $? -eq 0 ] && { color "安装kubeadm成功!" 0;sleep 1; } || { color "安装kubeadm失败!" 1 ; exit 2; }
-    
-    #实现kubectl命令自动补全功能    
+
+    #实现kubectl命令自动补全功能
+    apt install -y bash-completion
     kubectl completion bash > /etc/profile.d/kubectl_completion.sh
+    source /etc/profile.d/kubectl_completion.sh
 }
 
 #只有Kubernetes集群的第一个master节点需要执行下面初始化函数
@@ -249,6 +251,40 @@ EOF
 
 }
 
+config_network() {
+    FLANNEL_URL="https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml"
+    FLANNEL_MIRROR="https://githubfast.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml"
+    FLANNEL_FILE="kube-flannel.yml"
+
+    echo -e "\033[1;32m正在下载 Flannel 网络配置...\033[m"
+
+    # 优先使用官网链接
+    if curl -LO --connect-timeout 10 --max-time 30 "$FLANNEL_URL"; then
+        echo -e "\033[1;32m官网链接下载成功\033[m"
+    else
+        echo -e "\033[1;33m官网链接下载失败，尝试加速链接...\033[m"
+        # 尝试加速链接
+        if curl -LO --connect-timeout 10 --max-time 30 "$FLANNEL_MIRROR"; then
+            echo -e "\033[1;32m加速链接下载成功\033[m"
+        else
+            echo -e "\033[1;31m加速链接也下载失败\033[m"
+            echo -e "\033[1;33m请手动下载 Flannel 配置文件：\033[m"
+            echo -e "\033[1;33m  官网链接: $FLANNEL_URL\033[m"
+            echo -e "\033[1;33m  加速链接: $FLANNEL_MIRROR\033[m"
+            echo -e "\033[1;33m下载后执行: kubectl apply -f $FLANNEL_FILE\033[m"
+            return 1
+        fi
+    fi
+
+    # 应用配置
+    if kubectl apply -f "$FLANNEL_FILE"; then
+        color "Flannel 网络配置应用成功!" 0
+    else
+        color "Flannel 网络配置应用失败!" 1
+        return 1
+    fi
+}
+
 check
 
 show_menu() {
@@ -257,12 +293,13 @@ show_menu() {
     echo -e "\033[1;32m2) 加入已有的Kubernetes集群\033[m"
     echo -e "\033[1;32m3) 退出Kubernetes集群\033[m"
     echo -e "\033[1;32m4) 清理Kubernetes残留(重新初始化前执行)\033[m"
-    echo -e "\033[1;32m5) 退出本程序\033[m"
+    echo -e "\033[1;32m5) 配置网络(Flannel)\033[m"
+    echo -e "\033[1;32m6) 退出本程序\033[m"
     echo ""
 }
 
 show_menu
-read -p "请选择编号(1-5): " choice
+read -p "请选择编号(1-6): " choice
 
 case $choice in
 1)
@@ -287,6 +324,9 @@ case $choice in
     clean_kubernetes_residuals
     ;;
 5)
+    config_network
+    ;;
+6)
     exit
     ;;
 *)
