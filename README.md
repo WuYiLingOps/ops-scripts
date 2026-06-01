@@ -17,10 +17,6 @@
   - 镜像推送工具
   - 自动补全配置
 
-- [K8s相关脚本 (k8s/)](k8s/)
-  - K8s环境清理
-  - 自动补全配置
-
 - [系统管理脚本 (system_manage/)](system_manage/)
   - 用户管理
   - SSH密钥分发
@@ -34,11 +30,13 @@
   - Nginx SSL证书
 
 - [开发工具脚本 (dev_tools/)](dev_tools/)
-  - Git仓库同步
+  - 代理切换工具
+  - SSH密钥生成与分发
 
 - [软件安装脚本 (InstallSoftScript/)](InstallSoftScript/)
   - [MySQL安装脚本](#mysql安装脚本)
   - [Docker安装脚本](#docker安装脚本)
+  - [Kubernetes安装脚本](#kubernetes安装脚本)
   - [Redis安装脚本](#redis安装脚本)
   - [大数据组件安装脚本](#大数据组件安装脚本)
   - [Web服务安装脚本](#web服务安装脚本)
@@ -85,15 +83,6 @@
 | `docker-push-aliyun.bash` | 将本地Docker镜像上传至阿里云镜像仓库 |
 | `docker-自动补全.bash` | 配置Docker自动补全 |
 
-### K8s相关脚本
-
-**目录：** [`k8s/`](k8s/)
-
-| 脚本文件 | 说明 |
-|---------|------|
-| `clean-k8s.bash` | 清除K8s初始化数据 |
-| `k8s-自动补全脚本.bash` | K8s指令自动补全配置 |
-
 ### 系统管理脚本
 
 **目录：** [`system_manage/`](system_manage/)
@@ -122,7 +111,8 @@
 
 | 脚本文件 | 说明 |
 |---------|------|
-| `git-update.sh` | 同步本地Git仓库到云端 |
+| `clash.sh` | 代理切换脚本，支持start|stop|status，适用于WSL场景 |
+| `ssh-keygen-automated.sh` | 免交互SSH密钥生成与分发脚本（生产环境慎用） |
 
 ### 软件安装脚本
 
@@ -150,11 +140,21 @@
 
 | 脚本文件 | 说明 |
 |---------|------|
-| `install_docker.bash` | 使用YUM安装Docker |
-| `install_docker_bin.bash` | CentOS下YUM环境二进制安装Docker |
-| `ubuntu_install_docker_aliyun.bash` | Ubuntu环境下自动化安装Docker，支持删除旧版本、配置阿里云镜像源加速并安装新版本 |
+| `install_docker.bash` | 自动识别系统类型(CentOS/Ubuntu)并使用对应包管理器(YUM/APT)在线安装Docker，支持版本选择、镜像加速配置 |
+| `centos_install_docker_yum.bash` | CentOS/Rocky环境下使用YUM包管理器在线安装Docker |
+| `centos_install_docker_bin.bash` | CentOS环境下二进制方式安装Docker，支持自定义数据存储目录 |
+| `ubuntu_install_docker_apt.bash` | Ubuntu环境下使用APT包管理器在线安装Docker，支持删除旧版本、配置阿里云镜像源加速 |
 | `ubuntu_install_docker_bin.bash` | Ubuntu环境下简易二进制安装Docker |
 | `install_harbor.bash` | Ubuntu / CentOS 下安装harbor |
+
+#### Kubernetes安装脚本
+
+**目录：** [`InstallSoftScript/kubernetes/`](InstallSoftScript/kubernetes/)
+
+| 脚本文件 | 说明 |
+|---------|------|
+| `install_kubernetes_docker.sh` | 基于kubeadm + docker方式实现Kubernetes的初始准备到安装的全过程 |
+| `install_kubernetes_containerd.sh` | 基于kubeadm + Containerd方式实现Kubernetes的初始准备到安装的全过程 |
 
 #### Redis安装脚本
 
@@ -181,7 +181,7 @@
 
 | 脚本文件 | 说明 |
 |---------|------|
-| `install_nginx.bash` | CentOS下编译安装Nginx |
+| `install_nginx_universal.bash` | 通用Nginx编译安装脚本，自动识别CentOS/Ubuntu系统 |
 | `install_php_yum.bash` | CentOS下使用YUM安装PHP 8.2版本 |
 | `install_php83.bash` | 安装PHP 8.3版本 |
 
@@ -203,8 +203,10 @@
 
 | 脚本文件 | 说明 |
 |---------|------|
-| `install_gitlab.bash` | CentOS下安装GitLab脚本 |
+| `install_gitlab.sh` | 自动化安装GitLab（适配CentOS/Rocky/Ubuntu） |
+| `install_jenkins.sh` | 自动化安装Jenkins（适配CentOS/Rocky/Ubuntu） |
 | `install_mongodb.bash` | CentOS下安装MongoDB |
+| `install_nexus.sh` | 自动化安装Nexus（适配CentOS/Rocky/Ubuntu） |
 | `install-zabbix-agent2.bash` | CentOS环境下安装Zabbix Agent2客户端 |
 
 ### 大数据脚本
@@ -369,10 +371,10 @@ dos2unix install_MYSQL.sh
 
 - **作者：** YiLing Wu (hj)
 - **邮箱：** huangjing510@126.com
-- **URL：** http://huangjingblog.cn:510/
+- **URL：** https://script.huangjingblog.cn/
 
 ---
 
 ## 📄 版权信息
 
-Copyright (C) 2024 All rights reserved
+Copyright (C) 2026 All rights reserved
