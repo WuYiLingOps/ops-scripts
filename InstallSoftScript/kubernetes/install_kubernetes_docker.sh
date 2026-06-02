@@ -210,9 +210,26 @@ install_docker () {
     apt -y install docker.io || { color "安装Docker失败!" 1; exit 1; }
     cat > /etc/docker/daemon.json <<EOF
 {
-"registry-mirrors": ["https://docker.m.daocloud.io", "https://docker.1panel.live"],
-"insecure-registries":["harbor.huang.org"],
- "exec-opts": ["native.cgroupdriver=systemd"] 
+  "registry-mirrors": [
+    "https://0vmzj3q6.mirror.aliyuncs.com",
+    "https://vlgh0kqj.mirror.aliyuncs.com",
+    "https://docker.m.daocloud.io",
+    "https://mirror.baidubce.com",
+    "https://dockerproxy.com",
+    "https://mirror.iscas.ac.cn",
+    "https://huecker.io",
+    "https://dockerhub.timeweb.cloud",
+    "https://noohub.ru",
+    "https://docker.imgdb.de",
+    "https://docker-0.unsee.tech",
+    "https://docker.hlmirror.com",
+    "https://docker.1ms.run",
+    "https://func.ink",
+    "https://lispy.org",
+    "https://docker.xiaogenban1993.com"
+  ],
+  "insecure-registries": ["harbor.huang.org"],
+  "exec-opts": ["native.cgroupdriver=systemd"]
 }
 EOF
     systemctl restart docker.service
