@@ -17,9 +17,7 @@ source /etc/profile
 # 全局配置
 INSTALL_DIR="/data/mysql"
 LINK_DIR="${INSTALL_DIR}/mysql"
-WORK_DIR="/usr/local/src/mysql${MYSQL_VER}"
 INTERNAL_MYSQL_BASE_URL="http://mirrors.xxx.cn/source/mysql/bin"
-EXTERNAL_MYSQL_BASE_URL="https://cdn.mysql.com/archives/mysql-${MYSQL_VER%.*}"
 OLD_MYSQL_VER=$(mysqld --version 2>/dev/null | awk '{print $3}')
 
 
@@ -166,6 +164,8 @@ if [ "$INSTALL_MODE" == "online" ]; then
     # 构建安装包文件名
     ARCH=$(uname -m)
     MYSQL_BASENAME="mysql-${MYSQL_VER}-linux-glibc2.${GLIBC_VER}-${ARCH}"
+    WORK_DIR="/usr/local/src/mysql${MYSQL_VER}"
+    EXTERNAL_MYSQL_BASE_URL="https://cdn.mysql.com/archives/mysql-${MYSQL_VER%.*}"
 fi
 
 # 输出信息日志
