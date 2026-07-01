@@ -237,6 +237,11 @@ EOF
     sed -i 's@;session.save_path = "/tmp"@session.save_path = "/usr/local/php/tmp"@' "${PHP_PREFIX}/lib/php.ini"
     sed -i 's/^user = .*/user = www/' "${PHP_CONFIG}/php-fpm.d/www.conf"
     sed -i 's/^group = .*/group = www/' "${PHP_CONFIG}/php-fpm.d/www.conf"
+
+    # 修改常用PHP参数
+    sed -i 's/^post_max_size = .*/post_max_size = 16M/' "${PHP_PREFIX}/lib/php.ini"
+    sed -i 's/^max_execution_time = .*/max_execution_time = 300/' "${PHP_PREFIX}/lib/php.ini"
+    sed -i 's/^max_input_time = .*/max_input_time = 300/' "${PHP_PREFIX}/lib/php.ini"
     check_result "修改配置文件"
 
     # 配置systemd启动脚本
@@ -276,10 +281,11 @@ EOF
     echo ""
     log_info "${CYAN}使用说明:${RESET}"
     echo "  1. PHP已编译安装到: ${PHP_PREFIX}"
-    echo "  2. 配置文件目录: ${PHP_CONFIG}"
-    echo "  3. 使用 systemctl start php-fpm 启动服务"
-    echo "  4. 使用 systemctl stop php-fpm 停止服务"
-    echo "  5. 重启命令: systemctl restart php-fpm"
+    echo "  2. PHP配置文件: ${PHP_PREFIX}/lib/php.ini"
+    echo "  3. FPM配置目录: ${PHP_CONFIG}"
+    echo "  4. 使用 systemctl start php-fpm 启动服务"
+    echo "  5. 使用 systemctl stop php-fpm 停止服务"
+    echo "  6. 重启命令: systemctl restart php-fpm"
 }
 
 # ==================== 卸载PHP ====================
