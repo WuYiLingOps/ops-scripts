@@ -217,13 +217,16 @@ install_php() {
 
     # 配置环境变量
     log_step "8. 配置环境变量"
-    profile_path="/etc/profile"
-    php_path_line="export PATH=\$PATH:${PHP_PREFIX}/bin"
+    profile_d="/etc/profile.d"
+    php_env_file="${profile_d}/php.sh"
 
-    if ! grep -q "${PHP_PREFIX}/bin" "${profile_path}"; then
-        echo "${php_path_line}" >> "${profile_path}"
-        source "${profile_path}"
-    fi
+    mkdir -p "${profile_d}"
+    cat > "${php_env_file}" <<EOF
+# PHP Environment
+export PATH=\$PATH:${PHP_PREFIX}/bin:${PHP_PREFIX}/sbin
+EOF
+    chmod +x "${php_env_file}"
+    source "${php_env_file}"
     check_result "配置环境变量"
 
     # 修改配置文件
@@ -283,23 +286,28 @@ EOF
 uninstall_php() {
     log_step "1. 开始卸载 PHP"
 
-    # 检查是否已安装
-    if ! command -v php &> /dev/null; then
+    # 检查是否已安装（通过检测安装目录）
+    PHP_PREFIX="/usr/local/php"
+    PHP_CONFIG="/etc/php"
+
+    if [ ! -d "${PHP_PREFIX}" ]; then
         log_warn "PHP 未安装，无需卸载"
         return 0
     fi
 
-    CURRENT_VERSION=$(php -v 2>/dev/null | head -n1)
-    log_info "当前版本: ${CURRENT_VERSION}"
+    # 获取已安装版本
+    if [ -x "${PHP_PREFIX}/bin/php" ]; then
+        CURRENT_VERSION=$("${PHP_PREFIX}/bin/php" -v 2>/dev/null | head -n1)
+        log_info "当前版本: ${CURRENT_VERSION}"
+    else
+        log_info "检测到安装目录，但 php 可执行文件不存在"
+    fi
 
     read -rp "确认卸载 PHP？(y/n): " confirm
     if [[ "${confirm}" != "y" && "${confirm}" != "Y" ]]; then
         log_info "取消卸载"
         return 0
     fi
-
-    PHP_PREFIX="/usr/local/php"
-    PHP_CONFIG="/etc/php"
 
     # 停止服务
     log_step "2. 停止PHP-FPM服务"
@@ -334,9 +342,9 @@ uninstall_php() {
 
     # 删除环境变量
     log_step "7. 清理环境变量"
-    profile_path="/etc/profile"
-    if grep -q "${PHP_PREFIX}/bin" "${profile_path}"; then
-        sed -i "\|${PHP_PREFIX}/bin|d" "${profile_path}"
+    php_env_file="/etc/profile.d/php.sh"
+    if [ -f "${php_env_file}" ]; then
+        rm -f "${php_env_file}"
         check_result "清理环境变量"
     fi
 
@@ -352,7 +360,7 @@ uninstall_php() {
 
     # 验证卸载
     log_step "9. 验证卸载"
-    if ! command -v php &> /dev/null && [ ! -d "${PHP_PREFIX}" ]; then
+    if [ ! -d "${PHP_PREFIX}" ]; then
         log_info "PHP 卸载成功"
     else
         log_error "PHP 卸载可能不完整"
@@ -364,7 +372,7 @@ show_help() {
     echo -e "${CYAN}用法:${RESET} $0 [选项]"
     echo ""
     echo -e "${CYAN}选项:${RESET}"
-    echo "  install    安装 PHP (源码编译)"
+    echo "  install    安装 PHP (源码编译) [默认]"
     echo "  uninstall  卸载 PHP"
     echo "  -h,--help  显示此帮助信息"
     echo ""
@@ -388,10 +396,9 @@ main() {
     echo -e "${CYAN}================================================================${RESET}"
     echo ""
 
-    # 检查参数
+    # 默认执行安装
     if [ $# -eq 0 ]; then
-        show_help
-        exit 1
+        set -- install
     fi
 
     case "$1" in
