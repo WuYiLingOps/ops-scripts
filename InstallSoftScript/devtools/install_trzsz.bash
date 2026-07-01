@@ -223,12 +223,15 @@ uninstall_trzsz() {
 show_help() {
     echo -e "${CYAN}用法:${RESET} $0 [选项]"
     echo ""
+    echo -e "${CYAN}说明:${RESET} 不传参数时默认执行install"
+    echo ""
     echo -e "${CYAN}选项:${RESET}"
     echo "  install    安装 trzsz"
     echo "  uninstall  卸载 trzsz"
     echo "  -h,--help  显示此帮助信息"
     echo ""
     echo -e "${CYAN}示例:${RESET}"
+    echo "  sudo $0          # 默认安装"
     echo "  sudo $0 install"
     echo "  sudo $0 uninstall"
 }
@@ -240,13 +243,10 @@ main() {
     echo -e "${CYAN}================================================================${RESET}"
     echo ""
 
-    # 检查参数
-    if [ $# -eq 0 ]; then
-        show_help
-        exit 1
-    fi
+    # 设置默认操作：不传参时默认为install
+    ACTION="${1:-install}"
 
-    case "$1" in
+    case "${ACTION}" in
         install)
             check_root
             detect_system
