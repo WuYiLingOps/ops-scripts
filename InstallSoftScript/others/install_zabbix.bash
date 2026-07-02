@@ -16,10 +16,10 @@
 
 # ==================== 默认配置 ====================
 # zabbix版本选项
-ZABBIX_VERSION="7.0"  #可用
-#ZABBIX_VERSION="7.2"  #可用
-#ZABBIX_VERSION="7.4"  #可用
-#ZABBIX_VERSION="8.0"  #可用
+ZABBIX_VERSION="7.0"  #可用 2026/07/01
+#ZABBIX_VERSION="7.2"  #可用 2026/07/02
+#ZABBIX_VERSION="7.4"  #可用 2026/07/02
+#ZABBIX_VERSION="8.0"  #架构不支持，官网没找到amd64相关包 2026/07/02
 
 ZABBIX_DB_NAME="zabbix"
 ZABBIX_DB_USER="zabbix"
@@ -30,11 +30,11 @@ ZABBIX_SERVER_PORT="80"
 ZABBIX_DOMAIN=""
 
 # PHP版本选择
-PHP_VERSION="8.0"  #可用
-#PHP_VERSION="8.2"  #可用
-#PHP_VERSION="8.3"  #可用
-#PHP_VERSION="8.4"  #可用
-#PHP_VERSION="8.5"  #可用
+PHP_VERSION="8.0"  #可用 2026/07/01
+#PHP_VERSION="8.2"  #可用 2026/07/02
+#PHP_VERSION="8.3"  #可用 2026/07/02
+#PHP_VERSION="8.4"  #可用 2026/07/02
+#PHP_VERSION="8.5"  #可用 2026/07/02
 
 
 # ==================== 源配置选择 ====================
