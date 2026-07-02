@@ -14,6 +14,42 @@
 #Copyright (C):    2026 All rights reserved
 #********************************************************************
 
+# ==================== 默认配置 ====================
+# zabbix版本选项
+ZABBIX_VERSION="7.0"
+#ZABBIX_VERSION="7.2"
+#ZABBIX_VERSION="7.4"
+#ZABBIX_VERSION="8.0"
+
+ZABBIX_DB_NAME="zabbix"
+ZABBIX_DB_USER="zabbix"
+ZABBIX_DB_PASS="zabbix123"
+MYSQL_ROOT_PASS=""
+ZABBIX_SERVER_HOST="localhost"
+ZABBIX_SERVER_PORT="80"
+ZABBIX_DOMAIN=""
+
+# PHP版本选择
+PHP_VERSION="8.0"
+#PHP_VERSION="8.2"
+#PHP_VERSION="8.3"
+#PHP_VERSION="8.4"
+#PHP_VERSION="8.5"
+
+
+# ==================== 源配置选择 ====================
+# 使用方式: 取消注释需要的源类型，注释掉不需要的源类型
+# Zabbix 源配置（二选一）
+#USE_ZABBIX_OFFICIAL=true        # 使用官方源
+USE_ZABBIX_NEXUS=true          # 使用 Nexus 私有源
+
+# PHP 源配置（二选一）
+#USE_PHP_OFFICIAL=true           # 使用官方 PPA 源
+USE_PHP_NEXUS=true             # 使用 Nexus 私有源
+
+# Nexus 私有源配置
+NEXUS_URL="http://nexus.huang.org"
+
 # ==================== 颜色定义 ====================
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -22,17 +58,6 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 BOLD='\033[1m'
 RESET='\033[0m'
-
-# ==================== 默认配置 ====================
-ZABBIX_VERSION="7.0"
-ZABBIX_DB_NAME="zabbix"
-ZABBIX_DB_USER="zabbix"
-ZABBIX_DB_PASS="zabbix123"
-MYSQL_ROOT_PASS=""
-ZABBIX_SERVER_HOST="localhost"
-ZABBIX_SERVER_PORT="80"
-PHP_VERSION="8.0"
-ZABBIX_DOMAIN=""
 
 # ==================== 日志函数 ====================
 log_info() {
@@ -267,51 +292,78 @@ setup_zabbix_repo() {
         log_warn "Zabbix源存在但不可用，重新配置"
     fi
 
-    # Ubuntu/Debian系统 - 安装deb包获取GPG密钥，手动创建源文件
-    local zabbix_deb_url=""
-    local zabbix_codename=""
+    # ==================== Zabbix 源配置（二选一） ====================
+    # 使用方式: 在上方配置区域选择 USE_ZABBIX_OFFICIAL 或 USE_ZABBIX_NEXUS
 
-    if [[ "$OS_ID" == "ubuntu" ]]; then
-        zabbix_codename="${UBUNTU_CODENAME:-jammy}"
-        zabbix_deb_url="https://repo.zabbix.com/zabbix/${ZABBIX_VERSION}/ubuntu/pool/main/z/zabbix-release/zabbix-release_latest_${ZABBIX_VERSION}+ubuntu${OS_VERSION}_all.deb"
-    elif [[ "$OS_ID" == "debian" ]]; then
-        local major_version="${OS_VERSION%%.*}"
-        zabbix_codename="bookworm"
-        [[ "$major_version" == "11" ]] && zabbix_codename="bullseye"
-        zabbix_deb_url="https://repo.zabbix.com/zabbix/${ZABBIX_VERSION}/debian/pool/main/z/zabbix-release/zabbix-release_latest_${ZABBIX_VERSION}+debian${major_version}_all.deb"
-    else
-        log_error "不支持的Debian/Ubuntu系统: ${OS_ID}"
-        exit 1
-    fi
+    if [ "$USE_ZABBIX_NEXUS" == "true" ]; then
+        # ---------- Nexus 私有源 ----------
+        log_info "使用 Nexus 私有源: ${NEXUS_URL}"
 
-    # 下载并安装deb包（获取GPG密钥）
-    log_info "下载并安装Zabbix源包"
-    wget -q "${zabbix_deb_url}" -O /tmp/zabbix-release.deb || {
-        log_error "下载Zabbix源包失败"
-        exit 1
-    }
-    dpkg -i /tmp/zabbix-release.deb
-    rm -f /tmp/zabbix-release.deb
+        # 导入 Zabbix 签名密钥（从官方下载）
+        log_info "导入 Zabbix 签名密钥"
+        rm -f /usr/share/keyrings/nexus-zabbix.gpg 2>/dev/null
+        curl -fsSL "https://repo.zabbix.com/zabbix/APT-GPG-KEY" | gpg --dearmor -o /usr/share/keyrings/nexus-zabbix.gpg
 
-    # 找到deb包安装的GPG密钥
-    local keyring_path=""
-    for f in /usr/share/keyrings/zabbix*.gpg /etc/apt/trusted.gpg.d/zabbix*.gpg; do
-        [ -f "$f" ] && keyring_path="$f" && break
-    done
-
-    if [ -z "$keyring_path" ]; then
-        log_error "GPG密钥未找到"
-        exit 1
-    fi
-    log_info "GPG密钥: ${keyring_path}"
-
-    # 创建源文件（deb包可能没有自动创建）
-    if [ ! -f /etc/apt/sources.list.d/zabbix.list ]; then
-        log_info "创建Zabbix源文件"
+        # 创建源文件
+        log_info "创建 Zabbix 源文件"
         cat > /etc/apt/sources.list.d/zabbix.list <<EOF
+deb [trusted=yes] ${NEXUS_URL}/repository/zabbix-${ZABBIX_VERSION}-apt/ $(lsb_release -cs) main
+EOF
+
+    elif [ "$USE_ZABBIX_OFFICIAL" == "true" ]; then
+        # ---------- 官方源 ----------
+        log_info "使用 Zabbix 官方源"
+
+        # Ubuntu/Debian系统 - 安装deb包获取GPG密钥，手动创建源文件
+        local zabbix_deb_url=""
+        local zabbix_codename=""
+
+        if [[ "$OS_ID" == "ubuntu" ]]; then
+            zabbix_codename="${UBUNTU_CODENAME:-jammy}"
+            zabbix_deb_url="https://repo.zabbix.com/zabbix/${ZABBIX_VERSION}/ubuntu/pool/main/z/zabbix-release/zabbix-release_latest_${ZABBIX_VERSION}+ubuntu${OS_VERSION}_all.deb"
+        elif [[ "$OS_ID" == "debian" ]]; then
+            local major_version="${OS_VERSION%%.*}"
+            zabbix_codename="bookworm"
+            [[ "$major_version" == "11" ]] && zabbix_codename="bullseye"
+            zabbix_deb_url="https://repo.zabbix.com/zabbix/${ZABBIX_VERSION}/debian/pool/main/z/zabbix-release/zabbix-release_latest_${ZABBIX_VERSION}+debian${major_version}_all.deb"
+        else
+            log_error "不支持的Debian/Ubuntu系统: ${OS_ID}"
+            exit 1
+        fi
+
+        # 下载并安装deb包（获取GPG密钥）
+        log_info "下载并安装Zabbix源包"
+        wget -q "${zabbix_deb_url}" -O /tmp/zabbix-release.deb || {
+            log_error "下载Zabbix源包失败"
+            exit 1
+        }
+        dpkg -i /tmp/zabbix-release.deb
+        rm -f /tmp/zabbix-release.deb
+
+        # 找到deb包安装的GPG密钥
+        local keyring_path=""
+        for f in /usr/share/keyrings/zabbix*.gpg /etc/apt/trusted.gpg.d/zabbix*.gpg; do
+            [ -f "$f" ] && keyring_path="$f" && break
+        done
+
+        if [ -z "$keyring_path" ]; then
+            log_error "GPG密钥未找到"
+            exit 1
+        fi
+        log_info "GPG密钥: ${keyring_path}"
+
+        # 创建源文件（deb包可能没有自动创建）
+        if [ ! -f /etc/apt/sources.list.d/zabbix.list ]; then
+            log_info "创建Zabbix源文件"
+            cat > /etc/apt/sources.list.d/zabbix.list <<EOF
 deb [signed-by=${keyring_path}] https://repo.zabbix.com/zabbix/${ZABBIX_VERSION}/ubuntu ${zabbix_codename} main
 deb-src [signed-by=${keyring_path}] https://repo.zabbix.com/zabbix/${ZABBIX_VERSION}/ubuntu ${zabbix_codename} main
 EOF
+        fi
+
+    else
+        log_error "未选择 Zabbix 源类型，请在脚本配置区域设置 USE_ZABBIX_OFFICIAL 或 USE_ZABBIX_NEXUS"
+        exit 1
     fi
 
     # 更新并验证
@@ -455,11 +507,38 @@ EOF
 setup_php() {
     log_step "5. 安装和配置PHP"
 
-    # 添加PHP PPA源
-    log_info "添加PHP PPA源"
-    apt install -y software-properties-common
-    add-apt-repository -y ppa:ondrej/php
-    apt update -qq
+    # ==================== PHP 源配置（二选一） ====================
+    # 使用方式: 在上方配置区域选择 USE_PHP_OFFICIAL 或 USE_PHP_NEXUS
+
+    if [ "$USE_PHP_NEXUS" == "true" ]; then
+        # ---------- Nexus 私有源 ----------
+        log_info "使用 Nexus 私有源: ${NEXUS_URL}"
+
+        # 导入 PHP PPA 签名密钥（从 Launchpad 下载）
+        log_info "导入 PHP PPA 签名密钥"
+        rm -f /usr/share/keyrings/nexus-php.gpg 2>/dev/null
+        gpg --keyserver keyserver.ubuntu.com --recv-keys 4F4EA0AAE5267A6C 2>/dev/null
+        gpg --export 4F4EA0AAE5267A6C | gpg --dearmor -o /usr/share/keyrings/nexus-php.gpg
+
+        # 创建源文件
+        log_info "创建 PHP 源文件"
+        cat > /etc/apt/sources.list.d/php.list <<EOF
+deb [trusted=yes] ${NEXUS_URL}/repository/php-apt/ $(lsb_release -cs) main
+EOF
+
+        apt update -qq
+
+    elif [ "$USE_PHP_OFFICIAL" == "true" ]; then
+        # ---------- 官方 PPA 源 ----------
+        log_info "使用 PHP 官方 PPA 源"
+        apt install -y software-properties-common
+        add-apt-repository -y ppa:ondrej/php
+        apt update -qq
+
+    else
+        log_error "未选择 PHP 源类型，请在脚本配置区域设置 USE_PHP_OFFICIAL 或 USE_PHP_NEXUS"
+        exit 1
+    fi
 
     # 安装PHP-FPM及Zabbix所需扩展
     log_info "安装PHP扩展"
