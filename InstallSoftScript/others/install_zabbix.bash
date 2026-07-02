@@ -558,11 +558,11 @@ setup_php() {
             php${PHP_VERSION}-curl \
             php${PHP_VERSION}-zip
 
-        # 安装语言包（Zabbix Web需要en_US.UTF-8）
+        # 安装语言包（Zabbix Web需要en_US.UTF-8，中文用户可选zh_CN.UTF-8）
         log_info "安装语言包"
         apt install -y locales
-        locale-gen en_US.UTF-8
-        update-locale LANG=en_US.UTF-8
+        locale-gen en_US.UTF-8 zh_CN.UTF-8
+        update-locale LANG=zh_CN.UTF-8
 
         # 修改PHP配置
         local php_ini="/etc/php/${PHP_VERSION}/fpm/php.ini"
@@ -642,9 +642,41 @@ configure_zabbix_server() {
     log_info "Zabbix Server配置完成"
 }
 
+# ==================== 配置中文字体 ====================
+setup_font() {
+    log_step "7. 配置中文字体"
+
+    local font_dir="/usr/share/fonts/truetype/dejavu"
+    local font_file="${font_dir}/DejaVuSans.ttf"
+    local font_url="https://script.huangjingblog.cn/system_init/msyh.ttc"
+
+    # 备份原始字体
+    if [ -f "$font_file" ] && [ ! -f "${font_file}.bak" ]; then
+        cp "$font_file" "${font_file}.bak"
+    fi
+
+    # 下载微软雅黑字体
+    log_info "下载中文字体"
+    wget -q "$font_url" -O /tmp/msyh.ttc || {
+        log_warn "下载中文字体失败，图表中文可能显示异常"
+        log_info "下载地址: ${font_url}"
+        return 0
+    }
+
+    # 替换Zabbix默认字体
+    log_info "替换Zabbix字体"
+    cp /tmp/msyh.ttc "$font_file"
+    rm -f /tmp/msyh.ttc
+
+    # 刷新字体缓存
+    fc-cache -f 2>/dev/null
+
+    log_info "中文字体配置完成"
+}
+
 # ==================== 配置Nginx ====================
 configure_nginx() {
-    log_step "7. 配置Nginx"
+    log_step "8. 配置Nginx"
 
     local nginx_conf="/etc/nginx/conf.d/zabbix.conf"
 
@@ -693,7 +725,7 @@ EOF
 
 # ==================== 启动服务 ====================
 start_services() {
-    log_step "8. 启动服务"
+    log_step "9. 启动服务"
 
     log_info "启动Zabbix Server"
     systemctl start zabbix-server
@@ -720,7 +752,7 @@ start_services() {
 
 # ==================== 配置开机自启 ====================
 enable_services() {
-    log_step "9. 配置开机自启"
+    log_step "10. 配置开机自启"
 
     systemctl enable zabbix-server zabbix-agent2 nginx
 
@@ -756,6 +788,7 @@ do_install() {
     setup_database
     setup_php
     configure_zabbix_server
+    setup_font
     configure_nginx
     start_services
     enable_services
