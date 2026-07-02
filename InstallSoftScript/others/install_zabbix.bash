@@ -16,10 +16,10 @@
 
 # ==================== 默认配置 ====================
 # zabbix版本选项
-ZABBIX_VERSION="7.0"
-#ZABBIX_VERSION="7.2"
-#ZABBIX_VERSION="7.4"
-#ZABBIX_VERSION="8.0"
+ZABBIX_VERSION="7.0"  #可用
+#ZABBIX_VERSION="7.2"  #可用
+#ZABBIX_VERSION="7.4"  #可用
+#ZABBIX_VERSION="8.0"  #可用
 
 ZABBIX_DB_NAME="zabbix"
 ZABBIX_DB_USER="zabbix"
@@ -30,11 +30,11 @@ ZABBIX_SERVER_PORT="80"
 ZABBIX_DOMAIN=""
 
 # PHP版本选择
-PHP_VERSION="8.0"
-#PHP_VERSION="8.2"
-#PHP_VERSION="8.3"
-#PHP_VERSION="8.4"
-#PHP_VERSION="8.5"
+PHP_VERSION="8.0"  #可用
+#PHP_VERSION="8.2"  #可用
+#PHP_VERSION="8.3"  #可用
+#PHP_VERSION="8.4"  #可用
+#PHP_VERSION="8.5"  #可用
 
 
 # ==================== 源配置选择 ====================
@@ -302,12 +302,23 @@ setup_zabbix_repo() {
         # 导入 Zabbix 签名密钥（从官方下载）
         log_info "导入 Zabbix 签名密钥"
         rm -f /usr/share/keyrings/nexus-zabbix.gpg 2>/dev/null
-        curl -fsSL "https://repo.zabbix.com/zabbix/APT-GPG-KEY" | gpg --dearmor -o /usr/share/keyrings/nexus-zabbix.gpg
+        curl -fsSL "https://repo.zabbix.com/zabbix-official-repo.key" | gpg --dearmor -o /usr/share/keyrings/nexus-zabbix.gpg
+
+        # 检查 GPG 密钥是否导入成功
+        local keyring_option=""
+        if [ -f /usr/share/keyrings/nexus-zabbix.gpg ] && [ -s /usr/share/keyrings/nexus-zabbix.gpg ]; then
+            log_info "GPG 密钥导入成功: /usr/share/keyrings/nexus-zabbix.gpg"
+            keyring_option="signed-by=/usr/share/keyrings/nexus-zabbix.gpg"
+        else
+            log_warn "GPG 密钥导入失败，使用 trusted=yes 跳过签名验证"
+            keyring_option="trusted=yes"
+        fi
 
         # 创建源文件
         log_info "创建 Zabbix 源文件"
+        local zabbix_codename=$(lsb_release -cs)
         cat > /etc/apt/sources.list.d/zabbix.list <<EOF
-deb [trusted=yes] ${NEXUS_URL}/repository/zabbix-${ZABBIX_VERSION}-apt/ $(lsb_release -cs) main
+deb [${keyring_option}] ${NEXUS_URL}/repository/zabbix-${ZABBIX_VERSION}-apt/ ${zabbix_codename} main
 EOF
 
     elif [ "$USE_ZABBIX_OFFICIAL" == "true" ]; then
@@ -488,10 +499,20 @@ EOF
 
     check_result "创建Zabbix数据库和用户"
 
-    # 导入初始数据
+    # 导入初始数据（7.2+ 版本路径不同）
     log_info "导入Zabbix初始数据"
-    if [ -f /usr/share/zabbix-sql-scripts/mysql/server.sql.gz ]; then
-        zcat /usr/share/zabbix-sql-scripts/mysql/server.sql.gz | mysql --default-character-set=utf8mb4 -u"${ZABBIX_DB_USER}" -p"${ZABBIX_DB_PASS}" "${ZABBIX_DB_NAME}"
+    local sql_file=""
+    if [ -f /usr/share/zabbix/sql-scripts/mysql/server.sql.gz ]; then
+        # Zabbix 7.2+ 路径
+        sql_file="/usr/share/zabbix/sql-scripts/mysql/server.sql.gz"
+    elif [ -f /usr/share/zabbix-sql-scripts/mysql/server.sql.gz ]; then
+        # Zabbix 7.0 及之前路径
+        sql_file="/usr/share/zabbix-sql-scripts/mysql/server.sql.gz"
+    fi
+
+    if [ -n "$sql_file" ]; then
+        log_info "SQL文件: ${sql_file}"
+        zcat "$sql_file" | mysql --default-character-set=utf8mb4 -u"${ZABBIX_DB_USER}" -p"${ZABBIX_DB_PASS}" "${ZABBIX_DB_NAME}"
         check_result "导入Zabbix初始数据"
     else
         log_error "未找到Zabbix SQL数据文件"
@@ -740,7 +761,7 @@ do_install() {
     setup_database
     setup_php
     configure_zabbix_server
-    setup_font
+    #setup_font 脚本测试暂时关闭
     configure_nginx
     start_services
     enable_services
