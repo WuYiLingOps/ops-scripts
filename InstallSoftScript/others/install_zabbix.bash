@@ -6,8 +6,7 @@
 #Date:             2026-07-02
 #FileName:         install_zabbix.bash
 #URL:              https://script.huangjingblog.cn
-#Description:      Zabbix 7.0监控系统一键安装与卸载工具
-#                   - 支持Ubuntu/Debian(apt)和CentOS/RHEL/Alma(yum/dnf)
+#Description:      Zabbix 7.0监控系统一键安装与卸载工具（仅适配Ubuntu/Debian）
 #                   - 数据库: MySQL 8.0(系统仓库)
 #                   - Web服务: Nginx + PHP-FPM
 #                   - 前端: Zabbix Frontend (PHP)
@@ -76,12 +75,8 @@ detect_system() {
     # 检测包管理器
     if command -v apt &> /dev/null; then
         PKG_MANAGER="apt"
-    elif command -v yum &> /dev/null; then
-        PKG_MANAGER="yum"
-    elif command -v dnf &> /dev/null; then
-        PKG_MANAGER="dnf"
     else
-        log_error "未检测到支持的包管理器"
+        log_error "当前脚本仅适配Ubuntu/Debian系统（apt），不支持其他包管理器"
         exit 1
     fi
 
@@ -108,10 +103,6 @@ check_mysql_installed() {
         return 0
     fi
     if dpkg -l mariadb-server 2>/dev/null | grep -q "^ii"; then
-        return 0
-    fi
-    # 检查rpm/yum中mysql是否已安装
-    if command -v rpm &>/dev/null && rpm -qa 2>/dev/null | grep -q "mysql-server"; then
         return 0
     fi
     return 1
@@ -152,57 +143,24 @@ install_mysql() {
     systemctl disable mysqld 2>/dev/null || systemctl disable mysql 2>/dev/null || systemctl disable mariadb 2>/dev/null
 
     # 清理系统默认mysql和mariadb
-    if [ "$PKG_MANAGER" == "apt" ]; then
-        dpkg -l | grep -E "mysql|mariadb" | awk '{print $2}' | xargs dpkg --purge --force-all &>/dev/null
-    elif [ "$PKG_MANAGER" == "yum" ] || [ "$PKG_MANAGER" == "dnf" ]; then
-        rpm -qa | grep -E "mysql|mariadb" | xargs rpm -e --nodeps &>/dev/null
-    fi
+    dpkg -l | grep -E "mysql|mariadb" | awk '{print $2}' | xargs dpkg --purge --force-all &>/dev/null
 
-    if [ "$PKG_MANAGER" == "apt" ]; then
-        # Ubuntu/Debian系统 - 使用系统自带MySQL仓库（避免官方源GPG密钥过期问题）
-        log_info "使用系统仓库安装MySQL"
+    # Ubuntu/Debian系统 - 使用系统自带MySQL仓库（避免官方源GPG密钥过期问题）
+    log_info "使用系统仓库安装MySQL"
 
-        # 先清理可能存在的MySQL官方APT源残留（防止GPG错误干扰）
-        rm -f /etc/apt/sources.list.d/mysql.list 2>/dev/null
-        rm -f /etc/apt/sources.list.d/mysql-source.list 2>/dev/null
-        rm -f /etc/apt/sources.list.d/mysql.list.dpkg-old 2>/dev/null
+    # 先清理可能存在的MySQL官方APT源残留（防止GPG错误干扰）
+    rm -f /etc/apt/sources.list.d/mysql.list 2>/dev/null
+    rm -f /etc/apt/sources.list.d/mysql-source.list 2>/dev/null
+    rm -f /etc/apt/sources.list.d/mysql.list.dpkg-old 2>/dev/null
 
-        # 修复系统破损的依赖状态（前次安装失败可能留下残留）
-        log_info "修复系统破损依赖"
-        dpkg --configure -a 2>/dev/null
-        apt --fix-broken install -y 2>/dev/null
+    # 修复系统破损的依赖状态（前次安装失败可能留下残留）
+    log_info "修复系统破损依赖"
+    dpkg --configure -a 2>/dev/null
+    apt --fix-broken install -y 2>/dev/null
 
-        # 更新包列表并安装MySQL
-        apt update -qq
-        apt install -y mysql-server
-
-    elif [ "$PKG_MANAGER" == "yum" ] || [ "$PKG_MANAGER" == "dnf" ]; then
-        # RHEL/CentOS/Rocky/Alma系统 - 使用MySQL官方YUM仓库
-        log_info "添加MySQL官方YUM仓库"
-
-        local major_version="${OS_VERSION%%.*}"
-        local mysql_rpm_url=""
-
-        if [[ "$major_version" -eq 7 ]]; then
-            mysql_rpm_url="https://dev.mysql.com/get/mysql80-community-release-el7-11.noarch.rpm"
-        elif [[ "$major_version" -eq 8 ]]; then
-            mysql_rpm_url="https://dev.mysql.com/get/mysql80-community-release-el8-9.noarch.rpm"
-        elif [[ "$major_version" -eq 9 ]]; then
-            mysql_rpm_url="https://dev.mysql.com/get/mysql80-community-release-el9-5.noarch.rpm"
-        else
-            log_error "不支持的RHEL/CentOS版本: ${OS_VERSION}"
-            exit 1
-        fi
-
-        log_info "安装MySQL YUM仓库"
-        $PKG_MANAGER install -y "$mysql_rpm_url" || {
-            log_error "安装MySQL YUM仓库失败"
-            exit 1
-        }
-
-        # 安装MySQL社区版
-        $PKG_MANAGER install -y mysql-community-server
-    fi
+    # 更新包列表并安装MySQL
+    apt update -qq
+    apt install -y mysql-server
 
     check_result "安装MySQL"
 
@@ -301,102 +259,72 @@ setup_zabbix_repo() {
     log_step "1. 配置Zabbix源"
 
     # 检查是否已配置（存在且包可用才跳过）
-    if [ "$PKG_MANAGER" == "apt" ] && [ -f /etc/apt/sources.list.d/zabbix.list ]; then
+    if [ -f /etc/apt/sources.list.d/zabbix.list ]; then
         if apt-cache policy zabbix-server-mysql 2>/dev/null | grep -q "Candidate:"; then
             log_info "Zabbix源已配置且可用，跳过配置"
             return 0
         fi
         log_warn "Zabbix源存在但不可用，重新配置"
-    elif [ "$PKG_MANAGER" != "apt" ] && ls /etc/yum.repos.d/zabbix*.repo &>/dev/null; then
-        if yum list available zabbix-server-mysql &>/dev/null; then
-            log_info "Zabbix源已配置且可用，跳过配置"
-            return 0
-        fi
-        log_warn "Zabbix源存在但不可用，重新配置"
     fi
 
-    if [ "$PKG_MANAGER" == "apt" ]; then
-        # Ubuntu/Debian系统 - 安装deb包获取GPG密钥，手动创建源文件
-        local zabbix_deb_url=""
-        local zabbix_codename=""
+    # Ubuntu/Debian系统 - 安装deb包获取GPG密钥，手动创建源文件
+    local zabbix_deb_url=""
+    local zabbix_codename=""
 
-        if [[ "$OS_ID" == "ubuntu" ]]; then
-            zabbix_codename="${UBUNTU_CODENAME:-jammy}"
-            zabbix_deb_url="https://repo.zabbix.com/zabbix/${ZABBIX_VERSION}/ubuntu/pool/main/z/zabbix-release/zabbix-release_latest_${ZABBIX_VERSION}+ubuntu${OS_VERSION}_all.deb"
-        elif [[ "$OS_ID" == "debian" ]]; then
-            local major_version="${OS_VERSION%%.*}"
-            zabbix_codename="bookworm"
-            [[ "$major_version" == "11" ]] && zabbix_codename="bullseye"
-            zabbix_deb_url="https://repo.zabbix.com/zabbix/${ZABBIX_VERSION}/debian/pool/main/z/zabbix-release/zabbix-release_latest_${ZABBIX_VERSION}+debian${major_version}_all.deb"
-        else
-            log_error "不支持的Debian/Ubuntu系统: ${OS_ID}"
-            exit 1
-        fi
+    if [[ "$OS_ID" == "ubuntu" ]]; then
+        zabbix_codename="${UBUNTU_CODENAME:-jammy}"
+        zabbix_deb_url="https://repo.zabbix.com/zabbix/${ZABBIX_VERSION}/ubuntu/pool/main/z/zabbix-release/zabbix-release_latest_${ZABBIX_VERSION}+ubuntu${OS_VERSION}_all.deb"
+    elif [[ "$OS_ID" == "debian" ]]; then
+        local major_version="${OS_VERSION%%.*}"
+        zabbix_codename="bookworm"
+        [[ "$major_version" == "11" ]] && zabbix_codename="bullseye"
+        zabbix_deb_url="https://repo.zabbix.com/zabbix/${ZABBIX_VERSION}/debian/pool/main/z/zabbix-release/zabbix-release_latest_${ZABBIX_VERSION}+debian${major_version}_all.deb"
+    else
+        log_error "不支持的Debian/Ubuntu系统: ${OS_ID}"
+        exit 1
+    fi
 
-        # 下载并安装deb包（获取GPG密钥）
-        log_info "下载并安装Zabbix源包"
-        wget -q "${zabbix_deb_url}" -O /tmp/zabbix-release.deb || {
-            log_error "下载Zabbix源包失败"
-            exit 1
-        }
-        dpkg -i /tmp/zabbix-release.deb
-        rm -f /tmp/zabbix-release.deb
+    # 下载并安装deb包（获取GPG密钥）
+    log_info "下载并安装Zabbix源包"
+    wget -q "${zabbix_deb_url}" -O /tmp/zabbix-release.deb || {
+        log_error "下载Zabbix源包失败"
+        exit 1
+    }
+    dpkg -i /tmp/zabbix-release.deb
+    rm -f /tmp/zabbix-release.deb
 
-        # 找到deb包安装的GPG密钥
-        local keyring_path=""
-        for f in /usr/share/keyrings/zabbix*.gpg /etc/apt/trusted.gpg.d/zabbix*.gpg; do
-            [ -f "$f" ] && keyring_path="$f" && break
-        done
+    # 找到deb包安装的GPG密钥
+    local keyring_path=""
+    for f in /usr/share/keyrings/zabbix*.gpg /etc/apt/trusted.gpg.d/zabbix*.gpg; do
+        [ -f "$f" ] && keyring_path="$f" && break
+    done
 
-        if [ -z "$keyring_path" ]; then
-            log_error "GPG密钥未找到"
-            exit 1
-        fi
-        log_info "GPG密钥: ${keyring_path}"
+    if [ -z "$keyring_path" ]; then
+        log_error "GPG密钥未找到"
+        exit 1
+    fi
+    log_info "GPG密钥: ${keyring_path}"
 
-        # 创建源文件（deb包可能没有自动创建）
-        if [ ! -f /etc/apt/sources.list.d/zabbix.list ]; then
-            log_info "创建Zabbix源文件"
-            cat > /etc/apt/sources.list.d/zabbix.list <<EOF
+    # 创建源文件（deb包可能没有自动创建）
+    if [ ! -f /etc/apt/sources.list.d/zabbix.list ]; then
+        log_info "创建Zabbix源文件"
+        cat > /etc/apt/sources.list.d/zabbix.list <<EOF
 deb [signed-by=${keyring_path}] https://repo.zabbix.com/zabbix/${ZABBIX_VERSION}/ubuntu ${zabbix_codename} main
 deb-src [signed-by=${keyring_path}] https://repo.zabbix.com/zabbix/${ZABBIX_VERSION}/ubuntu ${zabbix_codename} main
 EOF
-        fi
-
-        # 更新并验证
-        log_info "更新包列表"
-        apt update -qq 2>&1 | tail -5
-
-        if ! apt-cache policy zabbix-server-mysql 2>/dev/null | grep -q "Candidate:.*${ZABBIX_VERSION}"; then
-            log_error "Zabbix ${ZABBIX_VERSION} 源配置失败"
-            log_info "当前候选版本:"
-            apt-cache policy zabbix-server-mysql 2>/dev/null | head -5
-            exit 1
-        fi
-        log_info "Zabbix源配置验证通过"
-
-    elif [ "$PKG_MANAGER" == "yum" ] || [ "$PKG_MANAGER" == "dnf" ]; then
-        # RHEL/CentOS/Rocky/Alma系统
-        local pkg_cmd="$PKG_MANAGER"
-        local rpm_url=""
-
-        # 根据系统版本构建URL
-        # 支持: el7, el8, el9
-        local major_version="${OS_VERSION%%.*}"
-
-        if [[ "$major_version" -ge 7 ]] && [[ "$major_version" -le 9 ]]; then
-            rpm_url="https://repo.zabbix.com/zabbix/${ZABBIX_VERSION}/rhel/${major_version}/x86_64/zabbix-release-latest.el${major_version}.noarch.rpm"
-        else
-            log_error "不支持的RHEL/CentOS版本: ${OS_VERSION}"
-            exit 1
-        fi
-
-        log_info "安装Zabbix源: ${rpm_url}"
-        $pkg_cmd install -y "$rpm_url" || {
-            log_error "安装Zabbix源失败，请检查网络连接"
-            exit 1
-        }
     fi
+
+    # 更新并验证
+    log_info "更新包列表"
+    apt update -qq 2>&1 | tail -5
+
+    if ! apt-cache policy zabbix-server-mysql 2>/dev/null | grep -q "Candidate:.*${ZABBIX_VERSION}"; then
+        log_error "Zabbix ${ZABBIX_VERSION} 源配置失败"
+        log_info "当前候选版本:"
+        apt-cache policy zabbix-server-mysql 2>/dev/null | head -5
+        exit 1
+    fi
+    log_info "Zabbix源配置验证通过"
 
     log_info "Zabbix源配置完成"
 }
@@ -405,30 +333,21 @@ EOF
 install_zabbix_packages() {
     log_step "3. 安装Zabbix组件"
 
-    if [ "$PKG_MANAGER" == "apt" ]; then
-        # 清理可能残留的破损包状态
-        for pkg in zabbix-agent2 nginx-core nginx; do
-            if dpkg -l "$pkg" 2>/dev/null | grep -qE "^i[^i]"; then
-                log_warn "清除残留的破损状态: ${pkg}"
-                dpkg --purge --force-all "$pkg" 2>/dev/null
-            fi
-        done
+    # 清理可能残留的破损包状态
+    for pkg in zabbix-agent2 nginx-core nginx; do
+        if dpkg -l "$pkg" 2>/dev/null | grep -qE "^i[^i]"; then
+            log_warn "清除残留的破损状态: ${pkg}"
+            dpkg --purge --force-all "$pkg" 2>/dev/null
+        fi
+    done
 
-        apt update -qq
-        apt install -y \
-            zabbix-server-mysql \
-            zabbix-sql-scripts \
-            zabbix-frontend-php \
-            nginx \
-            zabbix-agent2
-    elif [ "$PKG_MANAGER" == "yum" ] || [ "$PKG_MANAGER" == "dnf" ]; then
-        $PKG_MANAGER install -y \
-            zabbix-server-mysql \
-            zabbix-sql-scripts \
-            zabbix-web-mysql \
-            nginx \
-            zabbix-agent2
-    fi
+    apt update -qq
+    apt install -y \
+        zabbix-server-mysql \
+        zabbix-sql-scripts \
+        zabbix-frontend-php \
+        nginx \
+        zabbix-agent2
 
     check_result "安装Zabbix组件"
 }
@@ -441,8 +360,8 @@ ensure_mysql() {
     if ! check_mysql_installed; then
         log_warn "MySQL未安装"
         echo ""
-        read -rp "是否自动安装MySQL？(y/n): " install_mysql_choice
-        if [[ "${install_mysql_choice}" == "y" || "${install_mysql_choice}" == "Y" ]]; then
+        read -rp "是否自动安装MySQL？(Y/n): " install_mysql_choice
+        if [[ "${install_mysql_choice}" != "n" && "${install_mysql_choice}" != "N" ]]; then
             install_mysql
         else
             log_error "请先安装MySQL后重试"
@@ -453,8 +372,8 @@ ensure_mysql() {
         if ! check_mysql_running; then
             log_warn "MySQL已安装但服务未运行"
             echo ""
-            read -rp "是否尝试启动MySQL服务？(y/n): " start_mysql_choice
-            if [[ "${start_mysql_choice}" == "y" || "${start_mysql_choice}" == "Y" ]]; then
+            read -rp "是否尝试启动MySQL服务？(Y/n): " start_mysql_choice
+            if [[ "${start_mysql_choice}" != "n" && "${start_mysql_choice}" != "N" ]]; then
                 log_info "启动MySQL服务"
                 systemctl start mysql 2>/dev/null || systemctl start mysqld 2>/dev/null
                 sleep 3
@@ -462,8 +381,8 @@ ensure_mysql() {
                 if ! check_mysql_running; then
                     log_warn "MySQL服务启动失败，可能是旧版本残留"
                     echo ""
-                    read -rp "是否重新安装MySQL（使用系统仓库）？(y/n): " reinstall_mysql
-                    if [[ "${reinstall_mysql}" == "y" || "${reinstall_mysql}" == "Y" ]]; then
+                    read -rp "是否重新安装MySQL（使用系统仓库）？(Y/n): " reinstall_mysql
+                    if [[ "${reinstall_mysql}" != "n" && "${reinstall_mysql}" != "N" ]]; then
                         install_mysql
                     else
                         log_error "请手动处理MySQL服务后重试"
@@ -536,83 +455,46 @@ EOF
 setup_php() {
     log_step "5. 安装和配置PHP"
 
-    if [ "$PKG_MANAGER" == "apt" ]; then
-        # 添加PHP PPA源
-        log_info "添加PHP PPA源"
-        apt install -y software-properties-common
-        add-apt-repository -y ppa:ondrej/php
-        apt update -qq
+    # 添加PHP PPA源
+    log_info "添加PHP PPA源"
+    apt install -y software-properties-common
+    add-apt-repository -y ppa:ondrej/php
+    apt update -qq
 
-        # 安装PHP-FPM及Zabbix所需扩展
-        log_info "安装PHP扩展"
-        apt install -y \
-            php${PHP_VERSION}-fpm \
-            php${PHP_VERSION}-mysql \
-            php${PHP_VERSION}-bcmath \
-            php${PHP_VERSION}-mbstring \
-            php${PHP_VERSION}-gd \
-            php${PHP_VERSION}-xml \
-            php${PHP_VERSION}-intl \
-            php${PHP_VERSION}-soap \
-            php${PHP_VERSION}-ldap \
-            php${PHP_VERSION}-curl \
-            php${PHP_VERSION}-zip
+    # 安装PHP-FPM及Zabbix所需扩展
+    log_info "安装PHP扩展"
+    apt install -y \
+        php${PHP_VERSION}-fpm \
+        php${PHP_VERSION}-mysql \
+        php${PHP_VERSION}-bcmath \
+        php${PHP_VERSION}-mbstring \
+        php${PHP_VERSION}-gd \
+        php${PHP_VERSION}-xml \
+        php${PHP_VERSION}-intl \
+        php${PHP_VERSION}-soap \
+        php${PHP_VERSION}-ldap \
+        php${PHP_VERSION}-curl \
+        php${PHP_VERSION}-zip
 
-        # 安装语言包（Zabbix Web需要en_US.UTF-8，中文用户可选zh_CN.UTF-8）
-        log_info "安装语言包"
-        apt install -y locales
-        locale-gen en_US.UTF-8 zh_CN.UTF-8
-        update-locale LANG=zh_CN.UTF-8
+    # 安装语言包（Zabbix Web需要en_US.UTF-8，中文用户可选zh_CN.UTF-8）
+    log_info "安装语言包"
+    apt install -y locales
+    locale-gen en_US.UTF-8 zh_CN.UTF-8
+    update-locale LANG=zh_CN.UTF-8
 
-        # 修改PHP配置
-        local php_ini="/etc/php/${PHP_VERSION}/fpm/php.ini"
-        if [ -f "$php_ini" ]; then
-            log_info "修改PHP-FPM配置"
-            cp "${php_ini}" "${php_ini}.bak"
+    # 修改PHP配置
+    local php_ini="/etc/php/${PHP_VERSION}/fpm/php.ini"
+    if [ -f "$php_ini" ]; then
+        log_info "修改PHP-FPM配置"
+        cp "${php_ini}" "${php_ini}.bak"
 
-            sed -i 's/post_max_size = .*/post_max_size = 16M/' "$php_ini"
-            sed -i 's/max_execution_time = .*/max_execution_time = 300/' "$php_ini"
-            sed -i 's/max_input_time = .*/max_input_time = 300/' "$php_ini"
+        sed -i 's/post_max_size = .*/post_max_size = 16M/' "$php_ini"
+        sed -i 's/max_execution_time = .*/max_execution_time = 300/' "$php_ini"
+        sed -i 's/max_input_time = .*/max_input_time = 300/' "$php_ini"
 
-            # 重启PHP-FPM
-            systemctl restart "php${PHP_VERSION}-fpm"
-            check_result "重启PHP-FPM"
-        fi
-    elif [ "$PKG_MANAGER" == "yum" ] || [ "$PKG_MANAGER" == "dnf" ]; then
-        # CentOS/RHEL安装PHP
-        $PKG_MANAGER install -y epel-release
-        $PKG_MANAGER install -y https://rpms.remirepo.net/enterprise/remi-release-$(rpm -E '%{rhel}').rpm
-        $PKG_MANAGER module reset php
-        $PKG_MANAGER module enable php:remi-${PHP_VERSION} -y
-        $PKG_MANAGER install -y \
-            php-fpm \
-            php-mysqlnd \
-            php-bcmath \
-            php-mbstring \
-            php-gd \
-            php-xml \
-            php-intl \
-            php-soap \
-            php-ldap \
-            php-curl \
-            php-zip
-
-        # 安装语言包
-        $PKG_MANAGER install -y glibc-langpack-en
-
-        # 修改PHP配置
-        local php_ini="/etc/php.ini"
-        if [ -f "$php_ini" ]; then
-            log_info "修改PHP配置"
-            cp "${php_ini}" "${php_ini}.bak"
-
-            sed -i 's/post_max_size = .*/post_max_size = 16M/' "$php_ini"
-            sed -i 's/max_execution_time = .*/max_execution_time = 300/' "$php_ini"
-            sed -i 's/max_input_time = .*/max_input_time = 300/' "$php_ini"
-
-            systemctl restart php-fpm
-            check_result "重启PHP-FPM"
-        fi
+        # 重启PHP-FPM
+        systemctl restart "php${PHP_VERSION}-fpm"
+        check_result "重启PHP-FPM"
     fi
 
     log_info "PHP配置完成"
@@ -740,11 +622,7 @@ start_services() {
     check_result "启动Nginx"
 
     log_info "启动PHP-FPM"
-    if [ "$PKG_MANAGER" == "apt" ]; then
-        systemctl start "php${PHP_VERSION}-fpm"
-    else
-        systemctl start php-fpm
-    fi
+    systemctl start "php${PHP_VERSION}-fpm"
     check_result "启动PHP-FPM"
 
     log_info "服务启动完成"
@@ -755,12 +633,7 @@ enable_services() {
     log_step "10. 配置开机自启"
 
     systemctl enable zabbix-server zabbix-agent2 nginx
-
-    if [ "$PKG_MANAGER" == "apt" ]; then
-        systemctl enable "php${PHP_VERSION}-fpm"
-    else
-        systemctl enable php-fpm
-    fi
+    systemctl enable "php${PHP_VERSION}-fpm"
 
     log_info "开机自启配置完成"
 }
@@ -771,8 +644,8 @@ do_install() {
 
     # 检查是否已安装
     if check_zabbix_installed; then
-        read -rp "检测到Zabbix已安装，是否覆盖安装？(y/n): " confirm
-        if [[ "${confirm}" != "y" && "${confirm}" != "Y" ]]; then
+        read -rp "检测到Zabbix已安装，是否覆盖安装？(Y/n): " confirm
+        if [[ "${confirm}" == "n" || "${confirm}" == "N" ]]; then
             log_info "取消安装"
             return 0
         fi
@@ -821,8 +694,8 @@ do_uninstall() {
         return 0
     fi
 
-    read -rp "确认卸载Zabbix？(y/n): " confirm
-    if [[ "${confirm}" != "y" && "${confirm}" != "Y" ]]; then
+    read -rp "确认卸载Zabbix？(Y/n): " confirm
+    if [[ "${confirm}" == "n" || "${confirm}" == "N" ]]; then
         log_info "取消卸载"
         return 0
     fi
@@ -830,34 +703,21 @@ do_uninstall() {
     # 停止服务
     log_info "停止Zabbix服务"
     systemctl stop zabbix-server zabbix-agent2 nginx 2>/dev/null
-
-    if [ "$PKG_MANAGER" == "apt" ]; then
-        systemctl stop "php${PHP_VERSION}-fpm" 2>/dev/null
-    else
-        systemctl stop php-fpm 2>/dev/null
-    fi
+    systemctl stop "php${PHP_VERSION}-fpm" 2>/dev/null
 
     # 卸载Zabbix软件包
     log_info "卸载Zabbix软件包"
-    if [ "$PKG_MANAGER" == "apt" ]; then
-        apt purge -y zabbix-server-mysql zabbix-sql-scripts zabbix-frontend-php zabbix-agent2 2>/dev/null
-    elif [ "$PKG_MANAGER" == "yum" ] || [ "$PKG_MANAGER" == "dnf" ]; then
-        $PKG_MANAGER remove -y zabbix-server-mysql zabbix-sql-scripts zabbix-web-mysql zabbix-agent2 2>/dev/null
-    fi
+    apt purge -y zabbix-server-mysql zabbix-sql-scripts zabbix-frontend-php zabbix-agent2 2>/dev/null
 
     # 卸载Nginx
     echo ""
-    read -rp "是否卸载Nginx？(y/n): " del_nginx
-    if [[ "${del_nginx}" == "y" || "${del_nginx}" == "Y" ]]; then
+    read -rp "是否卸载Nginx？(Y/n): " del_nginx
+    if [[ "${del_nginx}" != "n" && "${del_nginx}" != "N" ]]; then
         log_info "卸载Nginx"
         systemctl stop nginx 2>/dev/null
         systemctl disable nginx 2>/dev/null
-        if [ "$PKG_MANAGER" == "apt" ]; then
-            apt purge -y nginx nginx-common nginx-core 2>/dev/null
-            apt autoremove -y 2>/dev/null
-        elif [ "$PKG_MANAGER" == "yum" ] || [ "$PKG_MANAGER" == "dnf" ]; then
-            $PKG_MANAGER remove -y nginx nginx-mod-http-image-filter nginx-mod-http-perl nginx-mod-http-xslt-filter nginx-mod-stream 2>/dev/null
-        fi
+        apt purge -y nginx nginx-common nginx-core 2>/dev/null
+        apt autoremove -y 2>/dev/null
         # 清理残留
         rm -rf /etc/nginx /var/log/nginx
         systemctl daemon-reload 2>/dev/null
@@ -866,44 +726,24 @@ do_uninstall() {
 
     # 卸载PHP
     echo ""
-    read -rp "是否卸载PHP？(y/n): " del_php
-    if [[ "${del_php}" == "y" || "${del_php}" == "Y" ]]; then
+    read -rp "是否卸载PHP？(Y/n): " del_php
+    if [[ "${del_php}" != "n" && "${del_php}" != "N" ]]; then
         log_info "卸载PHP"
-        if [ "$PKG_MANAGER" == "apt" ]; then
-            apt purge -y \
-                php${PHP_VERSION}-fpm \
-                php${PHP_VERSION}-mysql \
-                php${PHP_VERSION}-bcmath \
-                php${PHP_VERSION}-mbstring \
-                php${PHP_VERSION}-gd \
-                php${PHP_VERSION}-xml \
-                php${PHP_VERSION}-intl \
-                php${PHP_VERSION}-soap \
-                php${PHP_VERSION}-ldap \
-                php${PHP_VERSION}-curl \
-                php${PHP_VERSION}-zip \
-                php${PHP_VERSION}-common \
-                php${PHP_VERSION}-cli 2>/dev/null
-            apt autoremove -y 2>/dev/null
-        elif [ "$PKG_MANAGER" == "yum" ] || [ "$PKG_MANAGER" == "dnf" ]; then
-            $PKG_MANAGER remove -y \
-                php-fpm \
-                php-mysqlnd \
-                php-bcmath \
-                php-mbstring \
-                php-gd \
-                php-xml \
-                php-intl \
-                php-soap \
-                php-ldap \
-                php-curl \
-                php-zip \
-                php-common \
-                php-cli \
-                php-opcache \
-                php-json 2>/dev/null
-        fi
-        systemctl disable php-fpm 2>/dev/null
+        apt purge -y \
+            php${PHP_VERSION}-fpm \
+            php${PHP_VERSION}-mysql \
+            php${PHP_VERSION}-bcmath \
+            php${PHP_VERSION}-mbstring \
+            php${PHP_VERSION}-gd \
+            php${PHP_VERSION}-xml \
+            php${PHP_VERSION}-intl \
+            php${PHP_VERSION}-soap \
+            php${PHP_VERSION}-ldap \
+            php${PHP_VERSION}-curl \
+            php${PHP_VERSION}-zip \
+            php${PHP_VERSION}-common \
+            php${PHP_VERSION}-cli 2>/dev/null
+        apt autoremove -y 2>/dev/null
         log_info "PHP卸载完成"
     fi
 
@@ -922,23 +762,18 @@ do_uninstall() {
 
     # 删除Zabbix源配置
     echo ""
-    read -rp "是否删除Zabbix源配置？(y/n): " del_repo
-    if [[ "${del_repo}" == "y" || "${del_repo}" == "Y" ]]; then
+    read -rp "是否删除Zabbix源配置？(Y/n): " del_repo
+    if [[ "${del_repo}" != "n" && "${del_repo}" != "N" ]]; then
         log_info "删除Zabbix源配置"
-        if [ "$PKG_MANAGER" == "apt" ]; then
-            rm -f /etc/apt/sources.list.d/zabbix.list
-            apt update -qq 2>/dev/null
-        elif [ "$PKG_MANAGER" == "yum" ] || [ "$PKG_MANAGER" == "dnf" ]; then
-            rm -f /etc/yum.repos.d/zabbix*.repo
-            $PKG_MANAGER clean all 2>/dev/null
-        fi
+        rm -f /etc/apt/sources.list.d/zabbix.list
+        apt update -qq 2>/dev/null
         log_info "Zabbix源配置已删除"
     fi
 
     # 询问是否删除数据库
     echo ""
-    read -rp "是否删除Zabbix数据库？(y/n): " del_db
-    if [[ "${del_db}" == "y" || "${del_db}" == "Y" ]]; then
+    read -rp "是否删除Zabbix数据库？(Y/n): " del_db
+    if [[ "${del_db}" != "n" && "${del_db}" != "N" ]]; then
         read -rp "请输入MySQL root密码: " del_root_pass
         mysql -uroot -p"${del_root_pass}" -e "DROP DATABASE IF EXISTS ${ZABBIX_DB_NAME}; DROP USER IF EXISTS '${ZABBIX_DB_USER}'@'%'; FLUSH PRIVILEGES;" 2>/dev/null
         log_info "Zabbix数据库已删除"
@@ -946,36 +781,27 @@ do_uninstall() {
 
     # 询问是否卸载MySQL
     echo ""
-    read -rp "是否卸载MySQL？(y/n): " del_mysql
-    if [[ "${del_mysql}" == "y" || "${del_mysql}" == "Y" ]]; then
+    read -rp "是否卸载MySQL？(Y/n): " del_mysql
+    if [[ "${del_mysql}" != "n" && "${del_mysql}" != "N" ]]; then
         log_info "卸载MySQL"
 
         # 停止MySQL服务
-        systemctl stop mysql 2>/dev/null || systemctl stop mysqld 2>/dev/null
-        systemctl disable mysql 2>/dev/null || systemctl disable mysqld 2>/dev/null
+        systemctl stop mysql 2>/dev/null
+        systemctl disable mysql 2>/dev/null
 
         # 使用包管理器完全卸载MySQL（purge清除配置和服务文件）
-        if [ "$PKG_MANAGER" == "apt" ]; then
-            apt purge -y mysql-server mysql-server-* mysql-client mysql-client-* mysql-common 2>/dev/null
-            apt autoremove -y 2>/dev/null
-            # 删除MySQL APT配置和源
-            rm -f /etc/apt/sources.list.d/mysql.list 2>/dev/null
-            apt update -qq 2>/dev/null
-        elif [ "$PKG_MANAGER" == "yum" ] || [ "$PKG_MANAGER" == "dnf" ]; then
-            $PKG_MANAGER remove -y mysql-community-server mysql-community-client mysql-community-common mysql-community-libs 2>/dev/null
-            $PKG_MANAGER remove -y mysql80-community-release 2>/dev/null
-            $PKG_MANAGER clean all 2>/dev/null
-        fi
+        apt purge -y mysql-server mysql-server-* mysql-client mysql-client-* mysql-common 2>/dev/null
+        apt autoremove -y 2>/dev/null
+        # 删除MySQL APT配置和源
+        rm -f /etc/apt/sources.list.d/mysql.list 2>/dev/null
+        apt update -qq 2>/dev/null
 
         # 清理残留的systemd服务文件
         rm -f /etc/systemd/system/multi-user.target.wants/mysql.service 2>/dev/null
-        rm -f /etc/systemd/system/multi-user.target.wants/mysqld.service 2>/dev/null
         rm -f /lib/systemd/system/mysql.service 2>/dev/null
-        rm -f /lib/systemd/system/mysqld.service 2>/dev/null
         systemctl daemon-reload 2>/dev/null
 
         # 删除配置文件
-        rm -f /etc/my.cnf
         rm -rf /var/lib/mysql
         rm -rf /var/log/mysql*
 
