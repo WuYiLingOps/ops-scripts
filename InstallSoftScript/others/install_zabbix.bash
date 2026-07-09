@@ -761,7 +761,7 @@ do_install() {
     setup_database
     setup_php
     configure_zabbix_server
-    #setup_font 脚本测试暂时关闭
+    setup_font #脚本测试暂时关闭
     configure_nginx
     start_services
     enable_services
