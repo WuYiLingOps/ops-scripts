@@ -3,51 +3,187 @@
 #********************************************************************
 #Author:           YiLing Wu (hj)
 #email:            huangjing510@126.com
-#Date:             2023-12-23
+#Date:             2026-07-10
 #FileName:         centos_change-hostname-ip.bash
 #URL:              http://huangjingblog.cn:510/
-#Description:      CentOS模板机下快速修改主机名和IP地址
-#Copyright (C):    2024 All rights reserved
+#Description:      CentOS 模板机下快速修改主机名和 IP 地址
+#Copyright (C):    2026 All rights reserved
 #********************************************************************
 #
-# Usage: bash centos_change-hostname-ip.bash <主机名> <IP地址> 
+# Usage: bash centos_change-hostname-ip.bash <hostname> <last-octet>
+# Example: bash centos_change-hostname-ip.bash web01 100
+#
+# 适配 CentOS 7 NetworkScripts（ifcfg 格式）
+# 第二个参数只需输入 IP 的最后一段数字，脚本会自动拼接前三段
 
-#获取第一个IP地址的前三段（用于第一个网卡，如：192.168.10.）
-ip_prefix_eth0=`hostname -I | awk '{print $1}' | awk -F '.' '{print $1"."$2"."$3"."}'`
-#获取第二个IP地址的前三段（用于第二个网卡，如：10.0.0.），如果不存在则使用第一个IP的前三段
-ip_prefix_eth1=`hostname -I | awk '{if(NF>1) print $2; else print $1}' | awk -F '.' '{print $1"."$2"."$3"."}'`
-#模板机ip地址的最后一段（使用第一个IP）
-ip=`hostname -I |awk '{print $1}'|sed 's#.*\.##g'`
-#新的ip地址的最后一段
-ip_new=`echo $2 |sed 's#^.*\.##g'`
-#新的主机名
-hostname=$1
+# ============ 颜色定义 ============
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m'  # 无颜色
 
-#检测第一个网卡配置文件（优先使用eth0，如果不存在则使用ens33）
-if [ -f /etc/sysconfig/network-scripts/ifcfg-eth0 ]; then
-    netcard1="eth0"
-elif [ -f /etc/sysconfig/network-scripts/ifcfg-ens33 ]; then
-    netcard1="ens33"
-else
-    echo "未找到网卡配置文件 ifcfg-eth0 或 ifcfg-ens33"
+# ============ 参数校验 ============
+if [ $# -ne 2 ]; then
+    echo -e "${RED}${BOLD}Error: Insufficient parameters${NC}"
+    echo -e "${YELLOW}Usage: bash centos_change-hostname-ip.bash <hostname> <last-octet>${NC}"
+    echo -e "${YELLOW}Example: bash centos_change-hostname-ip.bash web01 100${NC}"
     exit 1
 fi
 
-#检测第二个网卡配置文件（优先使用eth1，如果不存在则使用ens34）
-if [ -f /etc/sysconfig/network-scripts/ifcfg-eth1 ]; then
-    netcard2="eth1"
-elif [ -f /etc/sysconfig/network-scripts/ifcfg-ens34 ]; then
-    netcard2="ens34"
-else
-    #如果第二个网卡不存在，只修改第一个网卡
-    netcard2=""
+hostname_new="$1"
+ip_last_new="$2"
+
+# 校验 IP 末段格式（1-255 的数字）
+if ! echo "$ip_last_new" | grep -qE '^[0-9]+$' || [ "$ip_last_new" -lt 1 ] || [ "$ip_last_new" -gt 255 ]; then
+    echo -e "${RED}${BOLD}Error: Invalid last octet -> $ip_last_new (must be a number between 1-255)${NC}"
+    exit 1
 fi
 
-#修改ip
-sed -i "s#$ip_prefix_eth0$ip#$ip_prefix_eth0$ip_new#g" /etc/sysconfig/network-scripts/ifcfg-$netcard1
-if [ -n "$netcard2" ]; then
-    sed -i "s#$ip_prefix_eth1$ip#$ip_prefix_eth1$ip_new#g" /etc/sysconfig/network-scripts/ifcfg-$netcard2
+# ============ 获取当前网络信息 ============
+ip_current=$(hostname -I | awk '{print $1}')
+ip_prefix=$(echo "$ip_current" | awk -F '.' '{print $1"."$2"."$3"."}')
+ip_last_old=$(echo "$ip_current" | awk -F '.' '{print $4}')
+ip_new="${ip_prefix}${ip_last_new}"
+
+gateway=$(ip route show default | awk '{print $3}')
+if [ -z "$gateway" ]; then
+    echo -e "${YELLOW}${BOLD}Warning: No default gateway detected, using ${ip_prefix}2 as gateway${NC}"
+    gateway="${ip_prefix}2"
 fi
-systemctl restart network 
-#修改主机名
-hostnamectl set-hostname $hostname && bash
+
+# ============ 检测网卡配置文件 ============
+NETSCRIPT_DIR="/etc/sysconfig/network-scripts"
+
+netcard1=""
+for card in eth0 ens33; do
+    if [ -f "$NETSCRIPT_DIR/ifcfg-$card" ]; then
+        netcard1="$card"
+        break
+    fi
+done
+
+if [ -z "$netcard1" ]; then
+    echo -e "${RED}${BOLD}Error: Network config file not found${NC}"
+    echo -e "${RED}Search directory: $NETSCRIPT_DIR${NC}"
+    exit 1
+fi
+
+netcard2=""
+for card in eth1 ens34; do
+    if [ -f "$NETSCRIPT_DIR/ifcfg-$card" ]; then
+        netcard2="$card"
+        break
+    fi
+done
+
+# ============ 显示修改信息 ============
+echo -e "${BLUE}==========================================${NC}"
+echo -e "${BLUE}${BOLD}  CentOS Template Initialization Tool${NC}"
+echo -e "${BLUE}==========================================${NC}"
+echo -e "  ${CYAN}Current hostname:${NC} $(hostname)"
+echo -e "  ${GREEN}${BOLD}New hostname:${NC}     ${GREEN}$hostname_new${NC}"
+echo -e "  ${CYAN}Current IP:${NC}       $ip_current"
+echo -e "  ${GREEN}${BOLD}New IP:${NC}           ${GREEN}$ip_new${NC}  (prefix $ip_prefix + last octet $ip_last_new)"
+echo -e "  ${CYAN}Gateway:${NC}          $gateway"
+echo -e "  ${CYAN}NIC 1:${NC}            $netcard1"
+echo -e "  ${CYAN}NIC 2:${NC}            ${netcard2:-${YELLOW}N/A${NC}}"
+echo -e "${BLUE}==========================================${NC}"
+echo ""
+
+# ============ [1/5] 关闭防火墙 ============
+echo -e "${CYAN}[1/5]${NC} Disabling firewall..."
+if systemctl is-active firewalld &>/dev/null; then
+    systemctl stop firewalld
+    systemctl disable firewalld
+    echo -e "      ${GREEN}firewalld stopped and disabled${NC}"
+else
+    echo -e "      ${YELLOW}firewalld not running, skipped${NC}"
+fi
+
+# ============ [2/5] 关闭 SELinux ============
+echo ""
+echo -e "${CYAN}[2/5]${NC} Disabling SELinux..."
+selinux_current=$(getenforce)
+if [ "$selinux_current" = "Disabled" ]; then
+    echo -e "      ${YELLOW}SELinux already disabled, skipped${NC}"
+else
+    # 临时关闭
+    setenforce 0
+    echo -e "      ${GREEN}SELinux temporarily disabled (Permissive)${NC}"
+    # 永久关闭
+    sed -i 's/^SELINUX=enforcing/SELINUX=disabled/' /etc/selinux/config
+    sed -i 's/^SELINUX=permissive/SELINUX=disabled/' /etc/selinux/config
+    echo -e "      ${GREEN}SELinux permanently disabled (takes effect after reboot)${NC}"
+fi
+
+# ============ [3/5] 修改网卡配置文件 ============
+echo ""
+echo -e "${CYAN}[3/5]${NC} Modifying network config files..."
+
+cfg1="$NETSCRIPT_DIR/ifcfg-$netcard1"
+cp "$cfg1" "${cfg1}.bak"
+echo -e "      ${YELLOW}Backup created: ${cfg1}.bak${NC}"
+
+sed -i "s|^IPADDR=.*|IPADDR=${ip_new}|" "$cfg1"
+sed -i "s|^GATEWAY=.*|GATEWAY=${gateway}|" "$cfg1"
+sed -i "s|^DNS1=.*|DNS1=223.5.5.5|" "$cfg1"
+
+# 如果没有 DNS 配置则添加
+if ! grep -q "^DNS1=" "$cfg1"; then
+    echo "DNS1=223.5.5.5" >> "$cfg1"
+fi
+
+echo -e "      ${GREEN}NIC 1 ($netcard1): IPADDR=${ip_new}, GATEWAY=${gateway}${NC}"
+
+if [ -n "$netcard2" ]; then
+    cfg2="$NETSCRIPT_DIR/ifcfg-$netcard2"
+    cp "$cfg2" "${cfg2}.bak"
+    sed -i "s|^IPADDR=.*|IPADDR=${ip_new}|" "$cfg2"
+    echo -e "      ${GREEN}NIC 2 ($netcard2): IPADDR=${ip_new}${NC}"
+fi
+
+# ============ [4/5] 重启网络 ============
+echo ""
+echo -e "${CYAN}[4/5]${NC} Restarting network..."
+systemctl restart network
+echo -e "      ${GREEN}Network restarted${NC}"
+
+# ============ [5/5] 修改主机名 ============
+echo ""
+echo -e "${CYAN}[5/5]${NC} Setting hostname: ${GREEN}${BOLD}$hostname_new${NC}"
+hostnamectl set-hostname "$hostname_new"
+
+# ============ 配置命令行显示 ============
+echo ""
+grep -q "PS1=" /etc/profile 2>/dev/null
+if [ $? -ne 0 ]; then
+    cat >>/etc/profile <<'EOF'
+# 短主机名和仅当前目录名
+export PS1='[\[\e[34;1m\]\u\[\e[0m\]@\[\e[32;1m\]\h\[\e[0m\]\[\e[31;1m\] \W\[\e[0m\]]\$ '
+# 全主机名和全目录名显示
+# export PS1='[\[\e[34;1m\]\u\[\e[0m\]@\[\e[32;1m\]\H\[\e[0m\]\[\e[31;1m\] \w\[\e[0m\]]\$ '
+EOF
+    echo -e "      ${GREEN}PS1 configured in /etc/profile${NC}"
+else
+    echo -e "      ${YELLOW}PS1 already configured in /etc/profile, skipped${NC}"
+fi
+
+# ============ 验证结果 ============
+echo ""
+echo -e "${GREEN}==========================================${NC}"
+echo -e "${GREEN}${BOLD}  Initialization complete! Please verify:${NC}"
+echo -e "${GREEN}==========================================${NC}"
+echo -e "  ${CYAN}Hostname:${NC}  ${GREEN}${BOLD}$(hostnamectl --static)${NC}"
+echo -e "  ${CYAN}IP Address:${NC} ${GREEN}${BOLD}$(hostname -I)${NC}"
+echo -e "  ${CYAN}Gateway:${NC}   ${GREEN}$(ip route show default | awk '{print $3}')${NC}"
+echo -e "  ${CYAN}Firewall:${NC}  ${RED}$(systemctl is-active firewalld 2>/dev/null || echo 'inactive')${NC}"
+echo -e "  ${CYAN}SELinux:${NC}   ${RED}$(getenforce)${NC}"
+echo -e "${GREEN}==========================================${NC}"
+echo ""
+echo -e "${YELLOW}Tip: Use the following commands to verify internet connectivity:${NC}"
+echo -e "  ${BOLD}ping -c 2 223.5.5.5${NC}"
+echo -e "  ${BOLD}ping -c 2 www.baidu.com${NC}"
+echo ""
