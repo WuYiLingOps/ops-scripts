@@ -16,9 +16,9 @@
 
 # ==================== 默认配置 ====================
 # zabbix版本选项
-ZABBIX_VERSION="7.0"  #可用 2026/07/01
+#ZABBIX_VERSION="7.0"  #可用 2026/07/01
 #ZABBIX_VERSION="7.2"  #可用 2026/07/02
-#ZABBIX_VERSION="7.4"  #可用 2026/07/02
+ZABBIX_VERSION="7.4"  #可用 2026/07/02
 #ZABBIX_VERSION="8.0"  #架构不支持，官网没找到amd64相关包 2026/07/02
 
 ZABBIX_DB_NAME="zabbix"
@@ -30,11 +30,11 @@ ZABBIX_SERVER_PORT="80"
 ZABBIX_DOMAIN=""
 
 # PHP版本选择
-PHP_VERSION="8.0"  #可用 2026/07/01
+#PHP_VERSION="8.0"  #可用 2026/07/01
 #PHP_VERSION="8.2"  #可用 2026/07/02
 #PHP_VERSION="8.3"  #可用 2026/07/02
 #PHP_VERSION="8.4"  #可用 2026/07/02
-#PHP_VERSION="8.5"  #可用 2026/07/02
+PHP_VERSION="8.5"  #可用 2026/07/02
 
 
 # ==================== 源配置选择 ====================
@@ -46,6 +46,16 @@ USE_ZABBIX_NEXUS=true          # 使用 Nexus 私有源
 # PHP 源配置（二选一）
 #USE_PHP_OFFICIAL=true           # 使用官方 PPA 源
 USE_PHP_NEXUS=true             # 使用 Nexus 私有源
+
+# Nginx 版本选择（需配合 Nexus 源使用）
+#NGINX_VERSION="1.24"  # 可用 2026/07/12
+#NGINX_VERSION="1.26"  # 可用 2026/07/12
+#NGINX_VERSION="1.28"  # 可用 2026/07/12
+NGINX_VERSION="1.30"   # 可用 2026/07/12
+
+# Nginx 源配置（二选一）
+#USE_NGINX_SYSTEM=true          # 使用系统默认源（1.18，版本低）
+USE_NGINX_NEXUS=true           # 使用 Nexus 私有源（镜像 nginx 官方源）
 
 # Nexus 私有源配置
 NEXUS_URL="http://nexus.huang.org"
@@ -392,6 +402,70 @@ EOF
     log_info "Zabbix源配置完成"
 }
 
+# ==================== 配置Nginx源 ====================
+setup_nginx_repo() {
+    log_step "配置 Nginx 源"
+
+    # 检查是否已配置
+    if [ -f /etc/apt/sources.list.d/nginx-official.list ]; then
+        if apt-cache policy nginx 2>/dev/null | grep -q "Candidate:"; then
+            log_info "Nginx 源已配置且可用，跳过配置"
+            return 0
+        fi
+        log_warn "Nginx 源存在但不可用，重新配置"
+    fi
+
+    if [ "$USE_NGINX_NEXUS" == "true" ]; then
+        log_info "使用 Nexus 私有源: ${NEXUS_URL}"
+
+        # 导入 nginx 官方 GPG 密钥
+        log_info "导入 Nginx 签名密钥"
+        rm -f /usr/share/keyrings/nexus-nginx-official.gpg 2>/dev/null
+        curl -fsSL "https://nginx.org/keys/nginx_signing.key" | gpg --dearmor -o /usr/share/keyrings/nexus-nginx-official.gpg
+
+        # 检查 GPG 密钥是否导入成功
+        local keyring_option=""
+        if [ -f /usr/share/keyrings/nexus-nginx-official.gpg ] && [ -s /usr/share/keyrings/nexus-nginx-official.gpg ]; then
+            log_info "GPG 密钥导入成功: /usr/share/keyrings/nexus-nginx-official.gpg"
+            keyring_option="signed-by=/usr/share/keyrings/nexus-nginx-official.gpg"
+        else
+            log_warn "GPG 密钥导入失败，使用 trusted=yes 跳过签名验证"
+            keyring_option="trusted=yes"
+        fi
+
+        # 创建源文件
+        log_info "创建 Nginx 源文件"
+        cat > /etc/apt/sources.list.d/nginx-official.list <<EOF
+deb [${keyring_option}] ${NEXUS_URL}/repository/nginx-official-apt/ jammy nginx
+EOF
+
+    elif [ "$USE_NGINX_SYSTEM" == "true" ]; then
+        log_info "使用系统默认 nginx 源（版本较低）"
+        # 删除可能存在的自定义源
+        rm -f /etc/apt/sources.list.d/nginx-official.list 2>/dev/null
+
+    else
+        log_error "未选择 Nginx 源类型，请在脚本配置区域设置 USE_NGINX_NEXUS 或 USE_NGINX_SYSTEM"
+        exit 1
+    fi
+
+    # 更新并验证
+    log_info "更新包列表"
+    apt update -qq 2>&1 | tail -5
+
+    if ! apt-cache policy nginx 2>/dev/null | grep -q "Candidate:"; then
+        log_error "Nginx 源配置失败"
+        exit 1
+    fi
+
+    # 显示候选版本
+    local candidate_version
+    candidate_version=$(apt-cache policy nginx 2>/dev/null | grep "Candidate:" | awk '{print $2}')
+    log_info "Nginx 候选版本: ${CYAN}${candidate_version}${RESET}"
+
+    log_info "Nginx 源配置完成"
+}
+
 # ==================== 安装Zabbix组件 ====================
 install_zabbix_packages() {
     log_step "3. 安装Zabbix组件"
@@ -409,7 +483,7 @@ install_zabbix_packages() {
         zabbix-server-mysql \
         zabbix-sql-scripts \
         zabbix-frontend-php \
-        nginx \
+        nginx=${NGINX_VERSION}.* \
         zabbix-agent2
 
     check_result "安装Zabbix组件"
@@ -538,13 +612,23 @@ setup_php() {
         # 导入 PHP PPA 签名密钥（从 Launchpad 下载）
         log_info "导入 PHP PPA 签名密钥"
         rm -f /usr/share/keyrings/nexus-php.gpg 2>/dev/null
-        gpg --keyserver keyserver.ubuntu.com --recv-keys 4F4EA0AAE5267A6C 2>/dev/null
-        gpg --export 4F4EA0AAE5267A6C | gpg --dearmor -o /usr/share/keyrings/nexus-php.gpg
+        gpg --keyserver keyserver.ubuntu.com --recv-keys 4F4EA0AAE5267A6C 71DAEAAB4AD4CAB6 2>/dev/null
+        gpg --export 4F4EA0AAE5267A6C 71DAEAAB4AD4CAB6 | gpg --dearmor -o /usr/share/keyrings/nexus-php.gpg
+
+        # 检查 GPG 密钥是否导入成功
+        local php_keyring_option=""
+        if [ -f /usr/share/keyrings/nexus-php.gpg ] && [ -s /usr/share/keyrings/nexus-php.gpg ]; then
+            log_info "GPG 密钥导入成功: /usr/share/keyrings/nexus-php.gpg"
+            php_keyring_option="signed-by=/usr/share/keyrings/nexus-php.gpg"
+        else
+            log_warn "GPG 密钥导入失败，使用 trusted=yes 跳过签名验证"
+            php_keyring_option="trusted=yes"
+        fi
 
         # 创建源文件
         log_info "创建 PHP 源文件"
         cat > /etc/apt/sources.list.d/php.list <<EOF
-deb [trusted=yes] ${NEXUS_URL}/repository/php-apt/ $(lsb_release -cs) main
+deb [${php_keyring_option}] ${NEXUS_URL}/repository/php-apt/ $(lsb_release -cs) main
 EOF
 
         apt update -qq
@@ -595,6 +679,13 @@ EOF
         # 重启PHP-FPM
         systemctl restart "php${PHP_VERSION}-fpm"
         check_result "重启PHP-FPM"
+    fi
+
+    # 将nginx用户添加到www-data组（解决502 Bad Gateway权限问题）
+    log_info "配置Nginx用户组权限"
+    if id -u nginx &>/dev/null; then
+        usermod -aG www-data nginx
+        log_info "已将 nginx 用户添加到 www-data 组"
     fi
 
     log_info "PHP配置完成"
@@ -662,13 +753,24 @@ configure_nginx() {
 
     local nginx_conf="/etc/nginx/conf.d/zabbix.conf"
 
+    # 根据Zabbix版本设置Web目录（7.2+ 路径变更）
+    local zabbix_web_root="/usr/share/zabbix"
+    local version_major="${ZABBIX_VERSION%%.*}"
+    local version_minor="${ZABBIX_VERSION#*.}"
+    # 7.0及之前: /usr/share/zabbix, 7.2+: /usr/share/zabbix/ui
+    if [[ "${version_major}" -ge 8 ]] || \
+       [[ "${version_major}" -eq 7 && "${version_minor}" -ge 2 ]]; then
+        zabbix_web_root="/usr/share/zabbix/ui"
+    fi
+    log_info "Zabbix Web目录: ${zabbix_web_root}"
+
     log_info "创建Nginx虚拟主机配置"
     cat > "$nginx_conf" <<EOF
 server {
     listen          ${ZABBIX_SERVER_PORT};
     server_name     ${ZABBIX_DOMAIN};
 
-    root            /usr/share/zabbix;
+    root            ${zabbix_web_root};
     index           index.php;
 
     location = /favicon.ico {
@@ -756,6 +858,7 @@ do_install() {
 
     # 执行安装步骤
     setup_zabbix_repo
+    setup_nginx_repo       # 配置 nginx 源（在安装组件之前）
     ensure_mysql
     install_zabbix_packages
     setup_database
@@ -821,6 +924,10 @@ do_uninstall() {
         # 清理残留
         rm -rf /etc/nginx /var/log/nginx
         systemctl daemon-reload 2>/dev/null
+        # 清理 nginx 源配置
+        rm -f /etc/apt/sources.list.d/nginx-official.list 2>/dev/null
+        rm -f /usr/share/keyrings/nexus-nginx-official.gpg 2>/dev/null
+        apt update -qq 2>/dev/null
         log_info "Nginx卸载完成"
     fi
 
