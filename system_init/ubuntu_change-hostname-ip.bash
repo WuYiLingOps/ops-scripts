@@ -129,10 +129,11 @@ if [ -z "$netcard" ]; then
     netcard="ens33"
 fi
 
-# 直接替换 IP 地址（保持原有格式不变）
-sudo sed -i "s#$ip_prefix$ip_last_old#$ip_new#g" "$cfg_path"
+# 修改 IP 地址（只替换 addresses 部分的 IP，不影响 routes 的网关）
+# 匹配格式：- 10.0.0.xxx/24
+sudo sed -i "s/- ${ip_prefix}[0-9]\+\/24/- ${ip_new}\/24/" "$cfg_path"
 
-echo -e "      ${GREEN}NIC ($netcard): IP changed to ${ip_new}${NC}"
+echo -e "      ${GREEN}NIC ($netcard): IP changed to ${ip_new}/24${NC}"
 
 # ============ [4/5] 重启网络 ============
 echo ""
@@ -147,18 +148,17 @@ sudo hostnamectl set-hostname "$hostname_new"
 
 # ============ 配置命令行显示 ============
 echo ""
-grep -q "PS1=" /root/.bashrc 2>/dev/null
+grep -q "PS1=" /etc/profile 2>/dev/null
 if [ $? -ne 0 ]; then
-    cat >>/root/.bashrc <<'EOF'
-
+    cat >>/etc/profile <<'EOF'
 # 短主机名和仅当前目录名
 export PS1='[\[\e[34;1m\]\u\[\e[0m\]@\[\e[32;1m\]\h\[\e[0m\]\[\e[31;1m\] \W\[\e[0m\]]\$ '
 # 全主机名和全目录名显示
 # export PS1='[\[\e[34;1m\]\u\[\e[0m\]@\[\e[32;1m\]\H\[\e[0m\]\[\e[31;1m\] \w\[\e[0m\]]\$ '
 EOF
-    echo -e "      ${GREEN}PS1 configured in /root/.bashrc${NC}"
+    echo -e "      ${GREEN}PS1 configured in /etc/profile${NC}"
 else
-    echo -e "      ${YELLOW}PS1 already configured in /root/.bashrc, skipped${NC}"
+    echo -e "      ${YELLOW}PS1 already configured in /etc/profile, skipped${NC}"
 fi
 
 # ============ 验证结果 ============
@@ -170,9 +170,3 @@ echo -e "  ${CYAN}Hostname:${NC}  ${GREEN}${BOLD}$(hostnamectl --static)${NC}"
 echo -e "  ${CYAN}IP Address:${NC} ${GREEN}${BOLD}$(hostname -I)${NC}"
 echo -e "  ${CYAN}Gateway:${NC}   ${GREEN}$(ip route show default | awk '{print $3}')${NC}"
 echo -e "  ${CYAN}Firewall:${NC}  ${RED}$(sudo ufw status 2>/dev/null || sudo systemctl is-active firewalld 2>/dev/null || echo 'inactive')${NC}"
-echo -e "${GREEN}==========================================${NC}"
-echo ""
-echo -e "${YELLOW}Tip: Use the following commands to verify internet connectivity:${NC}"
-echo -e "  ${BOLD}ping -c 2 223.5.5.5${NC}"
-echo -e "  ${BOLD}ping -c 2 www.baidu.com${NC}"
-echo ""
