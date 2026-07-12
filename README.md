@@ -7,7 +7,7 @@
 ### 根目录脚本分类
 
 - [系统初始化脚本 (system_init/)](system_init/)
-  - AnolisOS/CentOS/Ubuntu 系统初始化
+  - AnolisOS/CentOS/Rocky/Ubuntu 系统初始化
   - YUM源配置
   - 主机名和IP地址配置
   - 网络配置脚本
@@ -71,6 +71,7 @@
 | `centos_yum.bash` | CentOS环境YUM源配置 |
 | `anolisOS_change-hostname-ip.bash` | AnolisOS模板机快速修改主机名和IP |
 | `centos_change-hostname-ip.bash` | CentOS模板机快速修改主机名和IP |
+| `rocky_change-hostname-ip.bash` | Rocky Linux模板机快速修改主机名和IP |
 | `ubuntu_change-hostname-ip.bash` | Ubuntu模板机快速修改主机名和IP |
 
 ### Docker工具脚本
@@ -131,7 +132,7 @@
 | `install_mysql8_0_Multi-instance.bash` | CentOS下源码编译安装MySQL8.0并实现多实例 |
 | `install_compile_make_mysql5_7.bash` | 源码编译安装MySQL5.7（编译时间过长，谨慎选择） |
 | `install_compile_make_mysql8_0.bash` | 源码编译安装MySQL8.0（编译时间过久，谨慎选择） |
-| `install_MGR.bash` | CentOS下安装MGR单组集群 |
+| `install-mysql-interactive.sh` | MySQL交互式安装脚本 |
 | `update_gcc_cmake_install_MYSQL8.bash` | CentOS下更新GCC并源码编译安装MySQL8.0 |
 
 #### Docker安装脚本
@@ -183,7 +184,8 @@
 |---------|------|
 | `install_nginx_universal.bash` | 通用Nginx编译安装脚本，自动识别CentOS/Ubuntu系统 |
 | `install_php_yum.bash` | CentOS下使用YUM安装PHP 8.2版本 |
-| `install_php83.bash` | 安装PHP 8.3版本 |
+| `install_php83.bash` | CentOS下源码编译安装PHP 8.3版本 |
+| `install_php_source.bash` | PHP源码编译安装脚本（仅支持Ubuntu/Debian） |
 
 #### 开发工具安装脚本
 
@@ -196,6 +198,7 @@
 | `install_nvm_node.bash` | 检查本地是否存在NVM，并使用NVM安装Node18，并配置淘宝源 |
 | `install_python3.bash` | CentOS下使用YUM简易安装Python3 |
 | `install_golang.sh` | 自动化安装Go语言环境，支持下载、解压、配置环境变量并验证安装 |
+| `install_trzsz.bash` | 安装trzsz文件传输工具（支持拖拽上传下载） |
 
 #### 其他服务安装脚本
 
@@ -207,6 +210,7 @@
 | `install_jenkins.sh` | 自动化安装Jenkins（适配CentOS/Rocky/Ubuntu） |
 | `install_mongodb.bash` | CentOS下安装MongoDB |
 | `install_nexus.sh` | 自动化安装Nexus（适配CentOS/Rocky/Ubuntu） |
+| `install_zabbix.bash` | Zabbix服务端安装脚本（支持7.0/7.2/7.4版本） |
 | `install-zabbix-agent2.bash` | CentOS环境下安装Zabbix Agent2客户端 |
 
 ### 大数据脚本
