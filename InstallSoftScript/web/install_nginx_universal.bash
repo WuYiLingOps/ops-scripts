@@ -1,20 +1,18 @@
 #!/bin/bash
 #
 #********************************************************************
-#项目名称：InstallSoftScript
-#文件名称：install_nginx_universal.bash
-#创建时间：2026-05-02 17:58:03
-#
-#系统用户：wyl
-#作　　者：無以菱
-#联系邮箱：huangjing510@126.com
-#功能描述：通用 Nginx 编译安装脚本，自动识别 CentOS/Ubuntu 系统
-#
-#使用方式：
-#  sudo bash install_nginx_universal.bash           # 默认安装 1.24.0
-#  sudo bash install_nginx_universal.bash 1.26.0    # 安装指定版本
+#Author:           YiLing Wu (hj)
+#email:            huangjing510@126.com
+#Date:             2026-05-02 17:58:03
+#FileName:         install_nginx.bash
+#URL:              https://script.huangjingblog.cn
+#Description:      通用 Nginx 编译安装脚本，支持 RedHat/CentOS/Rocky/Ubuntu/Debian 等主流系统
+#                  - sudo bash install_nginx_universal.bash           # 默认安装 1.24.0
+#                  - sudo bash install_nginx_universal.bash 1.26.0    # 安装指定版本
+#Copyright (C):    2026 All rights reserved
 #********************************************************************
-#
+
+
 
 # ==================== 颜色定义 ====================
 RED='\033[0;31m'
@@ -103,7 +101,7 @@ case $OS in
         fi
         NOLOGIN_PATH="/usr/sbin/nologin"
         ;;
-    centos|rhel|fedora)
+    centos|rhel|fedora|rocky|almalinux|amzn)
         log_info "使用 yum 安装依赖"
         yum install -y gcc gcc-c++ automake openssl openssl-devel make pcre-devel gd-devel wget curl
         if [ $? -ne 0 ]; then
