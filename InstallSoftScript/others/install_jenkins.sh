@@ -11,9 +11,11 @@
 #********************************************************************
 
 # 定义Jenkins安装包下载地址（CentOS/Rocky用RPM包，Ubuntu用DEB包，按需注释切换）
-#URL="https://mirrors.tuna.tsinghua.edu.cn/jenkins/redhat-stable/jenkins-2.289.3-1.1.noarch.rpm"
+# 2025-12-11 清华源最新版本
+#URL="https://mirrors.tuna.tsinghua.edu.cn/jenkins/redhat-stable/jenkins-2.528.3-1.1.noarch.rpm"
 # 2025-12-09 清华源最新版本
 URL="https://mirrors.tuna.tsinghua.edu.cn/jenkins/debian-stable/jenkins_2.528.3_all.deb"
+# 阿里源
 #URL="https://mirrors.aliyun.com/jenkins/debian-stable/jenkins_2.289.3_all.deb"
 
 # 定义颜色输出变量
@@ -57,7 +59,7 @@ color () {
 # 安装Java依赖（适配不同系统）
 install_java(){
     if [ $ID = "centos" -o $ID = "rocky" ];then
-       yum -y install java-2.1.0-openjdk  # CentOS/Rocky安装OpenJDK 21
+       yum -y install java-21-openjdk-devel  # CentOS/Rocky安装OpenJDK 21 2026.07.19
     else
        apt update                        # Ubuntu更新源
        apt -y install openjdk-21-jdk      # Ubuntu安装OpenJDK 21
