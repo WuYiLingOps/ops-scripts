@@ -35,6 +35,15 @@ GITLAB_VERSION="17.3.1"   # ubuntu22.04/ubuntu24.04/centos9/rocky9 2026.7.20测�
 #   - el10: CentOS/RHEL 10.x / Rocky 10.x（在Packages/g/子目录下）
 #   - 注意：el8已从清华源移除，请使用el9或el10
 
+# 配置信息
+GITLAB_ROOT_PASSWORD="huang@123456"  # 新版密码必须符合复杂性要求且至少8位
+SMTP_PASSWORD="xxxxxxxxxxxxxx" # SMTP授权码
+SMTP_USER="2794998160@qq.com"  # SMTP邮箱账号
+SMTP_DOMAIN="qq.com"  # SMTP域名
+GITLAB_EMAIL="2794998160@qq.com"  # GitLab发件邮箱
+HOST="gitlab.huang.org"
+# HOST=`hostname -I|awk '{print $1}'`
+
 # 根据系统类型自动设置GITLAB_URL
 . /etc/os-release
 case $ID in
@@ -88,15 +97,6 @@ else
     exit 1
 fi
 echo "-------------------------------------------------------------------"
-
-# 配置信息
-GITLAB_ROOT_PASSWORD="huang@123456"  # 新版密码必须符合复杂性要求且至少8位
-SMTP_PASSWORD="xxxxxxxxxxxxxx"
-SMTP_USER="2794998160@qq.com"  # SMTP邮箱账号
-SMTP_DOMAIN="qq.com"  # SMTP域名
-GITLAB_EMAIL="2794998160@qq.com"  # GitLab发件邮箱
-HOST="gitlab.huang.org"
-# HOST=`hostname -I|awk '{print $1}'`
 
 # 定义颜色输出变量
 GREEN="echo -e \E[32;1m"
