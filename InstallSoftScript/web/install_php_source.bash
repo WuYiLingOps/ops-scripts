@@ -10,42 +10,51 @@
 #Copyright (C):    2026 All rights reserved
 #********************************************************************
 
-# ==================== 颜色定义 ====================
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
-BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-BOLD='\033[1m'
-RESET='\033[0m'
+# 颜色定义
+GREEN="echo -e \E[32;1m"
+RED="echo -e \E[31;1m"
+YELLOW="echo -e \E[33;1m"
+CYAN="echo -e \E[36;1m"
+END="\E[0m"
 
-# ==================== 日志函数 ====================
-log_info() {
-    echo -e "${GREEN}[INFO]${RESET} $1"
-}
-log_warn() {
-    echo -e "${YELLOW}[WARN]${RESET} $1"
-}
-log_error() {
-    echo -e "${RED}[ERROR]${RESET} $1"
-}
-log_step() {
-    echo -e "${BLUE}[STEP]${RESET} ${BOLD}$1${RESET}"
+# 日志函数
+color () {
+    RES_COL=60
+    MOVE_TO_COL="echo -en \\033[${RES_COL}G"
+    SETCOLOR_SUCCESS="echo -en \\033[1;32m"
+    SETCOLOR_FAILURE="echo -en \\033[1;31m"
+    SETCOLOR_WARNING="echo -en \\033[1;33m"
+    SETCOLOR_NORMAL="echo -en \E[0m"
+    echo -n "$1" && $MOVE_TO_COL
+    echo -n "["
+    if [ $2 = "success" -o $2 = "0" ] ;then
+        ${SETCOLOR_SUCCESS}
+        echo -n $" OK "
+    elif [ $2 = "failure" -o $2 = "1" ] ;then
+        ${SETCOLOR_FAILURE}
+        echo -n $"FAILED"
+    else
+        ${SETCOLOR_WARNING}
+        echo -n $"WARNING"
+    fi
+    ${SETCOLOR_NORMAL}
+    echo -n "]"
+    echo
 }
 
-# ==================== 检查命令执行结果 ====================
+# 检查执行结果
 check_result() {
     if [ $? -eq 0 ]; then
-        log_info "$1 成功"
+        color "$1 完成" 0
     else
-        log_error "$1 失败，脚本退出"
+        color "$1 失败" 1
         exit 1
     fi
 }
 
-# ==================== 检测系统信息 ====================
+# 检测系统信息
 detect_system() {
-    log_step "检测系统信息"
+    $GREEN "检测系统信息" ; echo -e "${END}"
 
     # 检测架构
     ARCH=$(uname -m)
@@ -57,7 +66,7 @@ detect_system() {
             ARCH_NAME="aarch64"
             ;;
         *)
-            log_error "不支持的架构: ${ARCH}"
+            color "不支持的架构: ${ARCH}" 1
             exit 1
             ;;
     esac
@@ -68,39 +77,39 @@ detect_system() {
         OS_ID="${ID}"
         OS_NAME="${PRETTY_NAME}"
     else
-        log_error "无法检测系统类型，缺少 /etc/os-release 文件"
+        color "无法检测系统类型，缺少 /etc/os-release 文件" 1
         exit 1
     fi
 
     # 仅支持 Ubuntu/Debian
     if ! command -v apt &> /dev/null; then
-        log_error "此脚本仅支持 Ubuntu/Debian 系统 (未检测到 apt)"
+        color "此脚本仅支持 Ubuntu/Debian 系统 (未检测到 apt)" 1
         exit 1
     fi
 
-    log_info "系统: ${CYAN}${OS_NAME}${RESET}"
-    log_info "架构: ${CYAN}${ARCH_NAME}${RESET}"
+    color "系统: ${OS_NAME}" 0
+    color "架构: ${ARCH_NAME}" 0
 }
 
-# ==================== 检查是否为root用户 ====================
+# 检查是否为root用户
 check_root() {
     if [ $EUID -ne 0 ]; then
-        log_error "请使用root用户执行该脚本 (sudo ./install_php_source.bash)"
+        color "请使用root用户执行该脚本 (sudo ./install_php_source.bash)" 1
         exit 1
     fi
 }
 
-# ==================== 检测PHP依赖 ====================
+# 检测PHP依赖
 detect_php_deps() {
-    log_step "检测PHP编译依赖"
+    $GREEN "检测PHP编译依赖" ; echo -e "${END}"
     ALL_DEPS="build-essential autoconf automake libtool pkg-config \
         libxml2-dev libbz2-dev libssl-dev libffi-dev libonig-dev libzip-dev \
         libcurl4-openssl-dev libjpeg-dev libpng-dev libwebp-dev libsqlite3-dev"
 }
 
-# ==================== 安装PHP ====================
+# 安装PHP
 install_php() {
-    log_step "1. 开始安装 PHP"
+    $GREEN "1. 开始安装 PHP" ; echo -e "${END}"
 
     # 版本和下载地址
     INSTALL_PATH="/usr/local"
@@ -120,42 +129,42 @@ install_php() {
     # 检查是否已安装
     if command -v php &> /dev/null; then
         CURRENT_VERSION=$(php -v 2>/dev/null | head -n1)
-        log_warn "PHP 已安装: ${CURRENT_VERSION}"
+        color "PHP 已安装: ${CURRENT_VERSION}" 2
         read -rp "是否重新安装？(y/n): " confirm
         if [[ "${confirm}" != "y" && "${confirm}" != "Y" ]]; then
-            log_info "取消安装"
+            color "取消安装" 0
             return 0
         fi
     fi
 
     # 安装依赖
-    log_step "2. 安装编译依赖"
+    $GREEN "2. 安装编译依赖" ; echo -e "${END}"
     apt-get update -qq
     apt-get install -y ${ALL_DEPS}
     check_result "安装编译依赖"
 
     # 下载源码包
-    log_step "3. 下载源码包 ${PHP_TARBALL}"
+    $GREEN "3. 下载源码包 ${PHP_TARBALL}" ; echo -e "${END}"
     mkdir -p "${DOWNLOAD_PATH}"
     cd "${DOWNLOAD_PATH}"
     if [ -f "${PHP_TARBALL}" ]; then
-        log_warn "源码包已存在，跳过下载: ${PHP_TARBALL}"
+        color "源码包已存在，跳过下载: ${PHP_TARBALL}" 2
     else
         wget "${PHP_URL}" -q
         check_result "下载源码包"
     fi
 
     # 解压源码包
-    log_step "4. 解压源码包"
+    $GREEN "4. 解压源码包" ; echo -e "${END}"
     if [ -d "${PHP_SRC_DIR}" ]; then
-        log_warn "源码目录已存在，跳过解压: ${PHP_SRC_DIR}"
+        color "源码目录已存在，跳过解压: ${PHP_SRC_DIR}" 2
     else
         tar -zxf "${PHP_TARBALL}"
         check_result "解压源码包"
     fi
 
     # 编译安装
-    log_step "5. 编译安装 PHP（请耐心等待...）"
+    $GREEN "5. 编译安装 PHP（请耐心等待...）" ; echo -e "${END}"
     cd "${PHP_SRC_DIR}"
     ./configure --prefix="${PHP_PREFIX}" --sysconfdir="${PHP_CONFIG}" \
         --with-openssl --with-zlib --with-bz2 --with-curl --enable-bcmath \
@@ -171,7 +180,7 @@ install_php() {
     check_result "安装"
 
     # 创建www用户和用户组
-    log_step "6. 创建www用户和用户组"
+    $GREEN "6. 创建www用户和用户组" ; echo -e "${END}"
     if ! getent group www > /dev/null 2>&1; then
         groupadd www
     fi
@@ -181,14 +190,14 @@ install_php() {
     check_result "创建www用户"
 
     # 复制配置文件
-    log_step "7. 复制配置文件"
+    $GREEN "7. 复制配置文件" ; echo -e "${END}"
     cp "${PHP_SRC_DIR}/php.ini-development" "${PHP_PREFIX}/lib/php.ini"
     cp "${PHP_CONFIG}/php-fpm.conf.default" "${PHP_CONFIG}/php-fpm.conf"
     cp "${PHP_CONFIG}/php-fpm.d/www.conf.default" "${PHP_CONFIG}/php-fpm.d/www.conf"
     check_result "复制配置文件"
 
     # 配置环境变量
-    log_step "8. 配置环境变量"
+    $GREEN "8. 配置环境变量" ; echo -e "${END}"
     profile_d="/etc/profile.d"
     php_env_file="${profile_d}/php.sh"
 
@@ -202,7 +211,7 @@ EOF
     check_result "配置环境变量"
 
     # 修改配置文件
-    log_step "9. 修改PHP配置文件"
+    $GREEN "9. 修改PHP配置文件" ; echo -e "${END}"
     mkdir -p "${PHP_PREFIX}/tmp"
     chmod -R 755 "${PHP_PREFIX}/tmp"
 
@@ -217,7 +226,7 @@ EOF
     check_result "修改配置文件"
 
     # 配置systemd启动脚本
-    log_step "10. 配置systemd启动脚本"
+    $GREEN "10. 配置systemd启动脚本" ; echo -e "${END}"
     cat >/usr/lib/systemd/system/php-fpm.service <<EOF
 [Unit]
 Description=php-fpm
@@ -241,17 +250,17 @@ EOF
     check_result "启动php-fpm服务"
 
     # 验证安装
-    log_step "11. 验证安装"
+    $GREEN "11. 验证安装" ; echo -e "${END}"
     if command -v php &> /dev/null; then
         INSTALLED_VERSION=$(php -v 2>/dev/null | head -n1)
-        log_info "PHP 安装成功: ${CYAN}${INSTALLED_VERSION}${RESET}"
+        color "PHP 安装成功: ${INSTALLED_VERSION}" 0
     else
-        log_error "PHP 安装失败"
+        color "PHP 安装失败" 1
         exit 1
     fi
 
     echo ""
-    log_info "${CYAN}使用说明:${RESET}"
+    echo "  使用说明:"
     echo "  1. PHP已编译安装到: ${PHP_PREFIX}"
     echo "  2. PHP配置文件: ${PHP_PREFIX}/lib/php.ini"
     echo "  3. FPM配置目录: ${PHP_CONFIG}"
@@ -260,74 +269,74 @@ EOF
     echo "  6. 重启命令: systemctl restart php-fpm"
 }
 
-# ==================== 卸载PHP ====================
+# 卸载PHP
 uninstall_php() {
-    log_step "1. 开始卸载 PHP"
+    $GREEN "1. 开始卸载 PHP" ; echo -e "${END}"
 
     # 检查是否已安装（通过检测安装目录）
     PHP_PREFIX="/usr/local/php"
     PHP_CONFIG="/etc/php"
 
     if [ ! -d "${PHP_PREFIX}" ]; then
-        log_warn "PHP 未安装，无需卸载"
+        color "PHP 未安装，无需卸载" 2
         return 0
     fi
 
     # 获取已安装版本
     if [ -x "${PHP_PREFIX}/bin/php" ]; then
         CURRENT_VERSION=$("${PHP_PREFIX}/bin/php" -v 2>/dev/null | head -n1)
-        log_info "当前版本: ${CURRENT_VERSION}"
+        color "当前版本: ${CURRENT_VERSION}" 0
     else
-        log_info "检测到安装目录，但 php 可执行文件不存在"
+        color "检测到安装目录，但 php 可执行文件不存在" 0
     fi
 
     read -rp "确认卸载 PHP？(y/n): " confirm
     if [[ "${confirm}" != "y" && "${confirm}" != "Y" ]]; then
-        log_info "取消卸载"
+        color "取消卸载" 0
         return 0
     fi
 
     # 停止服务
-    log_step "2. 停止PHP-FPM服务"
+    $GREEN "2. 停止PHP-FPM服务" ; echo -e "${END}"
     if systemctl is-active --quiet php-fpm; then
         systemctl stop php-fpm
         check_result "停止php-fpm服务"
     fi
 
     # 禁用服务
-    log_step "3. 禁用systemd服务"
+    $GREEN "3. 禁用systemd服务" ; echo -e "${END}"
     if systemctl is-enabled --quiet php-fpm; then
         systemctl disable php-fpm
         check_result "禁用php-fpm服务"
     fi
 
     # 删除systemd服务文件
-    log_step "4. 删除systemd服务文件"
+    $GREEN "4. 删除systemd服务文件" ; echo -e "${END}"
     rm -f /usr/lib/systemd/system/php-fpm.service
     systemctl daemon-reload
     check_result "删除systemd服务"
 
     # 删除PHP安装目录
-    log_step "5. 删除PHP安装目录"
+    $GREEN "5. 删除PHP安装目录" ; echo -e "${END}"
     rm -rf "${PHP_PREFIX}"
     rm -rf /usr/local/php-*
     check_result "删除PHP安装目录"
 
     # 删除配置文件
-    log_step "6. 删除配置文件"
+    $GREEN "6. 删除配置文件" ; echo -e "${END}"
     rm -rf "${PHP_CONFIG}"
     check_result "删除配置文件"
 
     # 删除环境变量
-    log_step "7. 清理环境变量"
+    $GREEN "7. 清理环境变量" ; echo -e "${END}"
     php_env_file="/etc/profile.d/php.sh"
     if [ -f "${php_env_file}" ]; then
         rm -f "${php_env_file}"
         check_result "清理环境变量"
     fi
 
-    # 删除www用户（如果有）
-    log_step "8. 删除www用户"
+    # 删除www用户
+    $GREEN "8. 删除www用户" ; echo -e "${END}"
     if id www > /dev/null 2>&1; then
         userdel www 2>/dev/null || true
     fi
@@ -337,28 +346,28 @@ uninstall_php() {
     check_result "删除www用户"
 
     # 验证卸载
-    log_step "9. 验证卸载"
+    $GREEN "9. 验证卸载" ; echo -e "${END}"
     if [ ! -d "${PHP_PREFIX}" ]; then
-        log_info "PHP 卸载成功"
+        color "PHP 卸载成功" 0
     else
-        log_error "PHP 卸载可能不完整"
+        color "PHP 卸载可能不完整" 1
     fi
 }
 
-# ==================== 显示帮助 ====================
+# 显示帮助
 show_help() {
-    echo -e "${CYAN}用法:${RESET} $0 [选项]"
+    echo "用法: $0 [选项]"
     echo ""
-    echo -e "${CYAN}选项:${RESET}"
+    echo "选项:"
     echo "  install    安装 PHP (源码编译) [默认]"
     echo "  uninstall  卸载 PHP"
     echo "  -h,--help  显示此帮助信息"
     echo ""
-    echo -e "${CYAN}示例:${RESET}"
+    echo "示例:"
     echo "  sudo $0 install"
     echo "  sudo $0 uninstall"
     echo ""
-    echo -e "${CYAN}说明:${RESET}"
+    echo "说明:"
     echo "  - 仅支持 Ubuntu/Debian 系统"
     echo "  - 安装方式为源码编译安装"
     echo "  - 安装时可指定版本，默认 8.4.10"
@@ -366,11 +375,11 @@ show_help() {
     echo "  - 配置文件: /etc/php"
 }
 
-# ==================== 主函数 ====================
+# 主函数
 main() {
-    echo -e "${CYAN}================================================================${RESET}"
-    echo -e "${CYAN}          PHP 安装与卸载工具${RESET}"
-    echo -e "${CYAN}================================================================${RESET}"
+    echo "================================================================"
+    echo "          PHP 安装与卸载工具"
+    echo "================================================================"
     echo ""
 
     # 默认执行安装
@@ -394,16 +403,16 @@ main() {
             show_help
             ;;
         *)
-            log_error "未知选项: $1"
+            color "未知选项: $1" 1
             show_help
             exit 1
             ;;
     esac
 
     echo ""
-    echo -e "${CYAN}================================================================${RESET}"
-    echo -e "${GREEN}脚本执行完成！${RESET}"
-    echo -e "${CYAN}================================================================${RESET}"
+    echo "================================================================"
+    color "脚本执行完成" 0
+    echo "================================================================"
     echo ""
 }
 
