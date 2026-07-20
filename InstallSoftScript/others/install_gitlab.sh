@@ -11,13 +11,83 @@
 #********************************************************************
 
 # 说明:安装GitLab 服务器内存建议至少4G,root密码至少8位
-# 当前URL是针对ubuntu22.04安装gitlab，如果需要安装别的版本请改成正确的url指向（jammy）
-GITLAB_VERSION="17.3.1"
-GITLAB_URL="https://mirrors.tuna.tsinghua.edu.cn/gitlab-ce/ubuntu/pool/jammy/main/g/gitlab-ce/gitlab-ce_${GITLAB_VERSION}-ce.0_amd64.deb"
-# GITLAB_URL="https://mirrors.tuna.tsinghua.edu.cn/gitlab-ce/ubuntu/pool/jammy/main/g/gitlab-ce/gitlab-ce_15.10.0-ce.0_amd64.deb" # 2026.1.3 当前清华源已经没有gitlab-ce_15之前的版本
-# GITLAB_URL="https://mirrors.tuna.tsinghua.edu.cn/gitlab-ce/ubuntu/pool/jammy/main/g/gitlab-ce/gitlab-ce_17.3.1-ce.0_amd64.deb"
-# GITLAB_URL="https://mirrors.tuna.tsinghua.edu.cn/gitlab-ce/yum/el8/gitlab-ce-14.1.5-ce.0.el8.x86_64.rpm" # 2026.1.3 # 当前清华源已经没有el8
-# GITLAB_URL="https://mirrors.tuna.tsinghua.edu.cn/gitlab-ce/yum/el7/gitlab-ce-14.1.5-ce.0.el7.x86_64.rpm"
+# 根据系统类型自动选择对应的GitLab安装包URL
+
+# GitLab CE版本选择（根据系统类型取消注释）：
+GITLAB_VERSION="17.3.1"   # ubuntu22.04/ubuntu24.04/centos9/rocky9 2026.7.20测试通过
+
+# 已验证的URL示例：
+# GITLAB_URL="https://mirrors.tuna.tsinghua.edu.cn/gitlab-ce/ubuntu/jammy/pool/main/g/gitlab-ce/gitlab-ce_17.3.1-ce.0_amd64.deb"
+# GITLAB_URL="https://mirrors.tuna.tsinghua.edu.cn/gitlab-ce/yum/el9/Packages/g/gitlab-ce-17.3.1-ce.0.el9.x86_64.rpm"
+#
+# 注意事项：
+# 1. el8目录已从清华源移除，请使用el9或el10
+# 2. Ubuntu 22.04 codename为jammy，24.04为noble
+# 3. 旧版本GitLab可能已从镜像源删除
+
+# 清华源GitLab镜像URL（按系统类型分类）
+# Ubuntu/Debian系列：
+#   - jammy: Ubuntu 22.04 LTS
+#   - noble: Ubuntu 24.04 LTS
+# CentOS/RHEL系列：
+#   - el7: CentOS/RHEL 7.x（直接在el7目录下）
+#   - el9: CentOS/RHEL 9.x / Rocky 9.x（在Packages/g/子目录下）
+#   - el10: CentOS/RHEL 10.x / Rocky 10.x（在Packages/g/子目录下）
+#   - 注意：el8已从清华源移除，请使用el9或el10
+
+# 根据系统类型自动设置GITLAB_URL
+. /etc/os-release
+case $ID in
+    ubuntu|debian)
+        # Ubuntu/Debian系统使用deb包
+        # NOTE: 如果需要其他Ubuntu版本，请修改下方CODENAME变量
+        CODENAME="${VERSION_CODENAME:-jammy}"
+        GITLAB_URL="https://mirrors.tuna.tsinghua.edu.cn/gitlab-ce/ubuntu/${CODENAME}/pool/main/g/gitlab-ce/gitlab-ce_${GITLAB_VERSION}-ce.0_amd64.deb"
+        ;;
+    centos|rhel|rocky|almalinux)
+        # CentOS/RHEL/Rocky系统使用rpm包
+        # NOTE: 根据系统主版本号自动选择el7/el9/el10（el8已从清华源移除）
+        MAJOR_VERSION=$(rpm -E %{rhel} 2>/dev/null || echo "9")
+
+        # 不同el版本的URL路径格式不同
+        if [ "$MAJOR_VERSION" -eq 7 ]; then
+            # el7: rpm文件直接在el7目录下
+            GITLAB_URL="https://mirrors.tuna.tsinghua.edu.cn/gitlab-ce/yum/el7/gitlab-ce-${GITLAB_VERSION}-ce.0.el7.x86_64.rpm"
+        elif [ "$MAJOR_VERSION" -ge 9 ]; then
+            # el9/el10: rpm文件在Packages/g/子目录下
+            GITLAB_URL="https://mirrors.tuna.tsinghua.edu.cn/gitlab-ce/yum/el${MAJOR_VERSION}/Packages/g/gitlab-ce-${GITLAB_VERSION}-ce.0.el${MAJOR_VERSION}.x86_64.rpm"
+        else
+            echo "不支持的系统版本: el${MAJOR_VERSION}"
+            echo "当前仅支持: el7, el9, el10"
+            exit 1
+        fi
+        ;;
+    *)
+        echo "不支持的系统类型: $ID"
+        echo "当前脚本仅支持: ubuntu, debian, centos, rhel, rocky, almalinux"
+        exit 1
+        ;;
+esac
+
+# 显示系统检测结果
+echo "-------------------------------------------------------------------"
+echo "系统检测: $ID $VERSION ($VERSION_CODENAME)"
+echo "安装版本: GitLab CE $GITLAB_VERSION"
+echo "安装包URL: $GITLAB_URL"
+echo "-------------------------------------------------------------------"
+
+# 验证URL是否可用
+echo "验证安装包URL是否可用..."
+if curl -sI "$GITLAB_URL" | grep -q "HTTP/2 200"; then
+    echo "URL验证成功，安装包存在"
+else
+    echo "警告: 指定版本 $GITLAB_VERSION 在当前系统可能不可用"
+    echo "请检查清华源是否提供此版本：https://mirrors.tuna.tsinghua.edu.cn/gitlab-ce/"
+    echo "如需安装其他版本，请修改 GITLAB_VERSION 变量"
+    echo "-------------------------------------------------------------------"
+    exit 1
+fi
+echo "-------------------------------------------------------------------"
 
 # 配置信息
 GITLAB_ROOT_PASSWORD="huang@123456"  # 新版密码必须符合复杂性要求且至少8位
@@ -28,15 +98,12 @@ GITLAB_EMAIL="2794998160@qq.com"  # GitLab发件邮箱
 HOST="gitlab.huang.org"
 # HOST=`hostname -I|awk '{print $1}'`
 
-# 加载系统版本信息（区分CentOS/Rocky/Ubuntu）
-. /etc/os-release
-
 # 定义颜色输出变量
 GREEN="echo -e \E[32;1m"
 END="\E[0m"
 
 # 定义自定义安装路径和相关配置
-DOWNLOAD_DIR="/opt/software"
+DOWNLOAD_DIR="/usr/local/src"
 GITLAB_PACKAGE=$(basename $GITLAB_URL)
 PACKAGE_PATH="$DOWNLOAD_DIR/$GITLAB_PACKAGE"
 
@@ -101,7 +168,7 @@ download_gitlab() {
 install_gitlab() {
     color "开始安装GitLab..." 0
     
-    if [ $ID = "centos" -o $ID = "rocky" ]; then
+    if [ $ID = "centos" -o $ID = "rocky" -o $ID = "rhel" -o $ID = "almalinux" ]; then
         yum -y install "$PACKAGE_PATH"
     else
         dpkg -i "$PACKAGE_PATH"
@@ -215,12 +282,14 @@ download_gitlab
 install_gitlab
 config_gitlab
 verify_gitlab
-cleanup
+#cleanup
 
 echo
 echo "-------------------------------------------------------------------"
 echo "GitLab安装信息:"
+echo "系统类型: $ID ($VERSION)"
 echo "安装版本: $GITLAB_VERSION"
+echo "安装包URL: $GITLAB_URL"
 echo "访问地址: http://$HOST/"
 echo "默认账号: root"
 echo "默认密码: $GITLAB_ROOT_PASSWORD"
