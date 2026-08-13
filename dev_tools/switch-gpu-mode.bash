@@ -11,16 +11,16 @@
 #********************************************************************
 case $1 in
   nvidia)
-    sudo prime-select nvidia && echo "已切换到独显模式，重启后生效"
+    sudo prime-select nvidia && echo -e "\033[1;32m已切换到独显模式，重启后生效\033[0m"
     ;;
   intel)
-    sudo prime-select intel && echo "已切换到核显模式，重启后生效"
+    sudo prime-select intel && echo -e "\033[1;34m已切换到核显模式，重启后生效\033[0m"
     ;;
   hybrid)
-    sudo prime-select on-demand && echo "已切换到混合模式，重启后生效"
+    sudo prime-select on-demand && echo -e "\033[1;33m已切换到混合模式，重启后生效\033[0m"
     ;;
   *)
     echo -e "当前模式: \033[1;32m$(prime-select query)\033[0m"
-    echo "用法: gpu-switch [nvidia|intel|hybrid]"
+    echo "用法: switch-gpu-module [nvidia|intel|hybrid]"
     ;;
 esac
