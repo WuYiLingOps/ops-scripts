@@ -47,12 +47,8 @@ DOCKER_COMPOSE_VERSION=2.27.1
 #DOCKER_COMPOSE_VERSION=2.6.1
 #DOCKER_COMPOSE_VERSION=1.29.2
 DOCKER_COMPOSE_FILE=docker-compose-linux-x86_64
-
-
 HARBOR_ADMIN_PASSWORD=123456
-
 HARBOR_IP=`hostname -I|awk '{print $1}'`
-
 
 COLOR_SUCCESS="echo -e \\033[1;32m"
 COLOR_FAILURE="echo -e \\033[1;31m"
@@ -84,7 +80,6 @@ color () {
     echo -n "]"
     echo 
 }
-
 
 install_docker(){
     if [ $ID = "centos" -o $ID = "rocky" ];then
@@ -149,8 +144,6 @@ EOF
     echo 'alias rmi="docker images -qa|xargs docker rmi -f"' >> ~/.bashrc
     echo 'alias rmc="docker ps -qa|xargs docker rm -f"' >> ~/.bashrc
 }
-
-
 
 install_docker_compose(){
     if [ $ID = "centos" -o $ID = "rocky" ];then
@@ -226,8 +219,6 @@ EOF
     fi
     echo "$HARBOR_IP     $HARBOR_NAME"   >> /etc/hosts
 }
-
-
 
 docker info  &> /dev/null  && ${COLOR_FAILURE}"Docker已安装"${END} || install_docker
 docker-compose --version &> /dev/null && ${COLOR_FAILURE}"Docker Compose已安装"${END} || install_docker_compose
