@@ -76,13 +76,13 @@ gpgcheck=0
 #baseurl=https://mirrors.aliyun.com/docker-ce/linux/centos/7/x86_64/stable/
 baseurl=${DOCKER_URL}/docker-ce/linux/centos/7/x86_64/stable/
 EOF
-        else     
+        else
             cat >  /etc/yum.repos.d/docker.repo  <<EOF
 [docker]
 name=docker
 gpgcheck=0
-#baseurl=https://mirrors.aliyun.com/docker-ce/linux/centos/8/x86_64/stable/
-baseurl=${DOCKER_URL}/docker-ce/linux/centos/8/x86_64/stable/
+#baseurl=https://mirrors.aliyun.com/docker-ce/linux/centos/${VERSION_ID}/x86_64/stable/
+baseurl=${DOCKER_URL}/docker-ce/linux/centos/${VERSION_ID}/x86_64/stable/
 EOF
         fi
         yum clean all 
