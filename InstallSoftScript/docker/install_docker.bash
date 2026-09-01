@@ -122,22 +122,16 @@ config_docker (){
     tee /etc/docker/daemon.json <<-'EOF'
 {
     "registry-mirrors": [
-        "https://docker.m.daocloud.io",
-        "https://docker.1panel.live",
-        "https://docker.1ms.run",
-        "https://docker.xuanyuan.me",
-        "https://docker.imgdb.de",
-        "https://docker-0.unsee.tech",
-        "https://docker.hlmirror.com",
-        "https://func.ink",
-        "https://lispy.org",
-        "https://docker.xiaogenban1993.com",
-        "https://mirror.baidubce.com",
-        "https://dockerproxy.com",
-        "https://mirror.iscas.ac.cn",
-        "https://huecker.io",
-        "https://dockerhub.timeweb.cloud",
-        "https://noohub.ru"
+    "https://docker.m.daocloud.io",
+    "https://dockerproxy.com",
+    "https://mirror.iscas.ac.cn",
+    "https://huecker.io",
+    "https://dockerhub.timeweb.cloud",
+    "https://docker.imgdb.de",
+    "https://docker-0.unsee.tech",
+    "https://docker.hlmirror.com",
+    "https://docker.1ms.run",
+    "https://lispy.org"
     ],
     "insecure-registries": ["harbor.huang.org"],
     "live-restore": true

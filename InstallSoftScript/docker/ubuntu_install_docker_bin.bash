@@ -71,22 +71,16 @@ sudo mkdir -p /etc/docker
 sudo cat >/etc/docker/daemon.json <<EOF
 {
   "registry-mirrors": [
-    "https://0vmzj3q6.mirror.aliyuncs.com",
-    "https://vlgh0kqj.mirror.aliyuncs.com",
     "https://docker.m.daocloud.io",
-    "https://mirror.baidubce.com",
     "https://dockerproxy.com",
     "https://mirror.iscas.ac.cn",
     "https://huecker.io",
     "https://dockerhub.timeweb.cloud",
-    "https://noohub.ru",
     "https://docker.imgdb.de",
     "https://docker-0.unsee.tech",
     "https://docker.hlmirror.com",
     "https://docker.1ms.run",
-    "https://func.ink",
-    "https://lispy.org",
-    "https://docker.xiaogenban1993.com"
+    "https://lispy.org"
   ]
 }
 EOF
