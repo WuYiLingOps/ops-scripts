@@ -14,6 +14,7 @@
 
 - [Docker工具脚本 (docker_tools/)](docker_tools/)
   - Docker镜像清理
+  - Docker镜像导出
   - 镜像推送工具
   - 自动补全配置
 
@@ -32,6 +33,15 @@
 - [开发工具脚本 (dev_tools/)](dev_tools/)
   - 代理切换工具
   - SSH密钥生成与分发
+  - 博客数据库备份
+  - Git自动拉取
+  - GPU模式切换
+
+- [Jenkins部署脚本 (jenkins-scripts/)](jenkins-scripts/)
+  - Go项目部署
+  - Spring Boot项目部署
+  - 前端项目部署
+  - Docker化部署
 
 - [软件安装脚本 (InstallSoftScript/)](InstallSoftScript/)
   - [MySQL安装脚本](#mysql安装脚本)
@@ -82,7 +92,8 @@
 |---------|------|
 | `docker_clean_tool.bash` | Docker镜像清理工具 |
 | `docker-push-aliyun.bash` | 将本地Docker镜像上传至阿里云镜像仓库 |
-| `docker-自动补全.bash` | 配置Docker自动补全 |
+| `docker-completion.bash` | 配置Docker自动补全 |
+| `docker_image_export.sh` | Docker镜像批量导出工具 |
 
 ### 系统管理脚本
 
@@ -114,6 +125,29 @@
 |---------|------|
 | `clash.sh` | 代理切换脚本，支持start|stop|status，适用于WSL场景 |
 | `ssh-keygen-automated.sh` | 免交互SSH密钥生成与分发脚本（生产环境慎用） |
+| `backup_blogdb.sh` | 博客数据库自动备份脚本 |
+| `git_auto_pull.bash` | Git仓库自动拉取脚本 |
+| `switch-gpu-mode.bash` | GPU模式切换脚本（混合模式/独显模式） |
+
+### Jenkins部署脚本
+
+**目录：** [`jenkins-scripts/`](jenkins-scripts/)
+
+Jenkins自动化部署脚本集合，涵盖Go、Java、前端等多种项目类型的CI/CD流程。
+
+| 脚本文件 | 说明 |
+|---------|------|
+| `go-ginweb.sh` | Go Gin Web项目部署脚本 |
+| `http_hello_go.sh` | Go HTTP Hello World项目部署 |
+| `gin-vue3-blog-docker.sh` | Gin+Vue3博客项目Docker化部署 |
+| `spring-boot-helloworld.sh` | Spring Boot Hello World项目部署 |
+| `spring-boot-helloworld-docker.sh` | Spring Boot项目Docker化部署 |
+| `freestyle-ruoyi.sh` | 若依框架自由风格部署 |
+| `ruoyi-docker.sh` | 若依框架Docker化部署 |
+| `blog-deploy.sh` | 博客项目完整部署流程 |
+| `wheel-html.sh` | 前端HTML项目部署 |
+| `git-deploy-wheel.sh` | Git自动化部署工具 |
+| `hello_world_war_tomcat.sh` | WAR包Tomcat部署脚本 |
 
 ### 软件安装脚本
 
@@ -146,6 +180,7 @@
 | `centos_install_docker_bin.bash` | CentOS环境下二进制方式安装Docker，支持自定义数据存储目录 |
 | `ubuntu_install_docker_apt.bash` | Ubuntu环境下使用APT包管理器在线安装Docker，支持删除旧版本、配置阿里云镜像源加速 |
 | `ubuntu_install_docker_bin.bash` | Ubuntu环境下简易二进制安装Docker |
+| `install_docker_offline.bash` | Docker离线安装脚本 |
 | `install_harbor.bash` | Ubuntu / CentOS 下安装harbor |
 
 #### Kubernetes安装脚本
@@ -183,6 +218,7 @@
 | 脚本文件 | 说明 |
 |---------|------|
 | `install_nginx_universal.bash` | 通用Nginx编译安装脚本，自动识别CentOS/Ubuntu系统 |
+| `install_nginx_apt.bash` | Ubuntu下使用APT安装Nginx |
 | `install_php_yum.bash` | CentOS下使用YUM安装PHP 8.2版本 |
 | `install_php83.bash` | CentOS下源码编译安装PHP 8.3版本 |
 | `install_php_source.bash` | PHP源码编译安装脚本（仅支持Ubuntu/Debian） |
@@ -198,6 +234,7 @@
 | `install_nvm_node.bash` | 检查本地是否存在NVM，并使用NVM安装Node18，并配置淘宝源 |
 | `install_python3.bash` | CentOS下使用YUM简易安装Python3 |
 | `install_golang.sh` | 自动化安装Go语言环境，支持下载、解压、配置环境变量并验证安装 |
+| `install_g_proxy.sh` | 安装并配置goproxy.cn代理加速Go模块下载 |
 | `install_trzsz.bash` | 安装trzsz文件传输工具（支持拖拽上传下载） |
 
 #### 其他服务安装脚本
@@ -286,6 +323,12 @@ bash InstallSoftScript/mysql/install_mysql8_0_bin.bash
 
 # 管理Hive服务
 bash BigDataScript/hiveservices.bash start
+
+# Jenkins部署Go项目
+bash jenkins-scripts/go-ginweb.sh
+
+# 切换代理
+bash dev_tools/clash.sh start
 ```
 
 
