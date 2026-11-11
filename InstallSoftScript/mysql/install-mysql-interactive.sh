@@ -192,52 +192,94 @@ echo_log_error() {
 # 功能：检查MySQL安装包在指定URL是否存在且可访问
 # 参数：$1 - 基础URL路径
 # 返回值：如果URL可用返回0，否则返回1
+# 注意：探测结果通过局部循环变量记录，仅在成功时写回全局 MYSQL_SOURCE/MYSQL_URL，
+#       避免失败探测（如 tar.gz）的文件名残留为全局值，导致后续缓存判断对不上实际文件
 check_url() {
+    local suffix source url
     for suffix in tar.gz tar.xz; do
-        MYSQL_SOURCE="${MYSQL_BASENAME}.${suffix}"
-        MYSQL_URL="$1/${MYSQL_SOURCE}"
+        source="${MYSQL_BASENAME}.${suffix}"
+        url="$1/${source}"
 
-        if curl --head --silent --fail --connect-timeout 5 "$MYSQL_URL" > /dev/null; then
+        if curl --head --silent --fail --connect-timeout 5 "$url" > /dev/null; then
+            MYSQL_SOURCE="$source"
+            MYSQL_URL="$url"
             return 0
         fi
     done
 
     return 1
 }
-
-# RPM包管理器依赖检查和安装
-# 功能：检查并安装RPM包管理器系统（如CentOS/RHEL）所需的依赖包
+# 功能：逐个检查并安装RPM包管理器系统（如CentOS/RHEL）所需的依赖包
 # 参数：$@ - 需要检查和安装的依赖包列表
 # 返回值：所有依赖安装成功返回0，否则返回1
+# 注意：逐个包检查，避免 rpm -q 一次查询多个包时误判依赖已满足；
+#       安装失败时保留 yum 原始输出并区分“软件源中不存在该包”和“网络/软件源连接故障”
 depend_judge_rpm() {
-    rpm -q $@ &>/dev/null && return || echo_log_info "安装依赖"
-    for arg in $@; do
+    local missing=()
+    local arg output
+    for arg in "$@"; do
         if [[ "$arg" == "gcc" ]]; then
-            which $arg &>/dev/null || yum install -y $arg &>/dev/null
+            command -v gcc &>/dev/null || missing+=("$arg")
         elif [[ "$arg" == "gcc-c++" ]]; then
-            which g++ &>/dev/null || yum install -y $arg &>/dev/null
-        else
-            rpm -q $arg &>/dev/null || yum install -y $arg &>/dev/null
+            command -v g++ &>/dev/null || missing+=("$arg")
+        elif ! rpm -q "$arg" &>/dev/null; then
+            missing+=("$arg")
         fi
-        [ $? -ne 0 ] && return 1
+    done
+    [ ${#missing[@]} -eq 0 ] && return 0
+
+    echo_log_info "安装依赖: ${missing[*]}"
+    for arg in "${missing[@]}"; do
+        if ! output=$(yum install -y "$arg" 2>&1); then
+            if grep -qE 'No match|Unable to find a match|No package .* available' <<<"$output"; then
+                echo_log_warn "\033[33m依赖 ${arg} 在软件源中不存在，与网络无关\033[0m"
+            elif grep -qE 'Curl error|curl#|Could not resolve|Timed out|Connection refused|Failed to download|Errors during downloading|Failed to connect' <<<"$output"; then
+                echo_log_warn "\033[33m依赖 ${arg} 安装失败：网络或软件源连接异常\033[0m"
+            else
+                echo_log_warn "\033[33m依赖 ${arg} 安装失败\033[0m"
+            fi
+            echo "$output" | grep -v '^$' | tail -n 15
+            return 1
+        fi
     done
     return 0
 }
 
 # DPKG包管理器依赖检查和安装
-# 功能：检查并安装DPKG包管理器系统（如Ubuntu/Debian）所需的依赖包
+# 功能：逐个检查并安装DPKG包管理器系统（如Ubuntu/Debian）所需的依赖包
 # 参数：$@ - 需要检查和安装的依赖包列表
 # 返回值：所有依赖安装成功返回0，否则返回1
+# 注意：与 depend_judge_rpm 一致，安装失败时保留 apt 原始输出用于定位原因
 depend_judge_dpkg() {
-    dpkg -s $@ &>/dev/null && return || echo_log_info "安装依赖"
-    apt update -qq &>/dev/null
-    for arg in $@; do
+    local missing=()
+    local arg output
+    for arg in "$@"; do
         if [[ "$arg" =~ (gcc|g\+\+) ]]; then
-            which $arg &>/dev/null || apt install -y $arg &>/dev/null
-        else
-            dpkg -s $arg &>/dev/null || apt install -y $arg &>/dev/null
+            command -v "$arg" &>/dev/null || missing+=("$arg")
+        elif ! dpkg -s "$arg" &>/dev/null; then
+            missing+=("$arg")
         fi
-        [ $? -ne 0 ] && return 1
+    done
+    [ ${#missing[@]} -eq 0 ] && return 0
+
+    echo_log_info "安装依赖: ${missing[*]}"
+    apt update -qq &>/dev/null
+    for arg in "${missing[@]}"; do
+        if ! output=$(apt install -y "$arg" 2>&1); then
+            # Debian 13 / Ubuntu 24.04 起 libaio1 改名为 libaio1t64，源中不存在时自动回退
+            if [[ "$arg" == "libaio1" ]] && grep -qE 'Unable to locate package' <<<"$output"; then
+                output=$(apt install -y libaio1t64 2>&1) && continue
+            fi
+            if grep -qE 'Unable to locate package' <<<"$output"; then
+                echo_log_warn "\033[33m依赖 ${arg} 在软件源中不存在，与网络无关\033[0m"
+            elif grep -qE 'Failed to fetch|Temporary failure|Could not resolve|Connection refused' <<<"$output"; then
+                echo_log_warn "\033[33m依赖 ${arg} 安装失败：网络或软件源连接异常\033[0m"
+            else
+                echo_log_warn "\033[33m依赖 ${arg} 安装失败\033[0m"
+            fi
+            echo "$output" | grep -v '^$' | tail -n 15
+            return 1
+        fi
     done
     return 0
 }
@@ -302,6 +344,12 @@ main() {
 # 功能：执行MySQL的完整安装流程，包括下载/解压、配置、初始化数据库、启动服务等
 # 注意：支持离线安装（本地安装包）和在线安装两种模式
 install_mysql() {
+    . /etc/os-release
+    case "$ID" in
+    centos|rocky|ubuntu|debian) ;;
+    *) echo_log_error "\033[31m暂不支持当前系统 \033[33m${PRETTY_NAME:-$ID}\033[0m，本脚本仅支持 CentOS、Rocky、Ubuntu、Debian\033[0m" ;;
+    esac
+
     if [[ "$OLD_MYSQL_VER" == "$MYSQL_VER" ]] || [ -d "$INSTALL_DIR/$MYSQL_BASENAME" ]; then
         [ -d "$INSTALL_DIR/$MYSQL_BASENAME" ] && MYSQL_DIR="$INSTALL_DIR/$MYSQL_BASENAME" || MYSQL_DIR="${LINK_DIR%/mysql}/$(readlink $LINK_DIR)"
         echo_log_warn "系统中已安装源码 \033[33mmysql${MYSQL_VER}\033[0m ,安装目录为 \033[33m$MYSQL_DIR\033[0m"
@@ -446,7 +494,7 @@ EOF
         mysql_root_password=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 8)
     fi
 
-    echo && close_fw && . /etc/os-release
+    echo && close_fw
 
     echo_log_info "清理系统默认 mysql 和 mariadb "
     if command -v yum &>/dev/null; then
@@ -457,14 +505,33 @@ EOF
         dpkg -l | grep mariadb | awk '{print $2}' | xargs dpkg --purge --force-all &>/dev/null
     fi
     
-    if [[ "$ID" =~ (rhel|centos|almalinux|rocky) ]]; then
-        [[ ${VERSION_ID%.*} -le 7 ]] && depend_judge_rpm wget libaio || depend_judge_rpm wget libaio ncurses-compat-libs
-    elif [[ "$ID" =~ (openEuler|fedora) ]]; then
-        depend_judge_rpm wget libaio ncurses-compat-libs
+    if [[ "$ID" =~ (centos|rocky) ]]; then
+        if [[ ${VERSION_ID%.*} -le 7 ]]; then
+            # EL7 的 ncurses 为 5.x，ncurses-libs 已直接提供 libncurses.so.5/libtinfo.so.5
+            if [[ "$GLIBC_VER" -eq 17 ]]; then
+                echo_log_warn "\033[33mEL7 的 ncurses 为 5.x，glibc2.17 版本的 MySQL 客户端依赖 libtinfo.so.6 且软件源中无法安装，mysql 客户端将不可用，建议改用 MySQL 5.7（glibc2.12）\033[0m"
+            fi
+            depend_judge_rpm wget libaio numactl-libs
+        elif [[ "$GLIBC_VER" -eq 12 && ${VERSION_ID%.*} -eq 8 ]]; then
+            # ncurses 6.x 系统上，glibc2.12 版本的 MySQL 二进制依赖 libncurses.so.5/libtinfo.so.5，
+            # 由 ncurses-compat-libs 提供（该包仅存在于 EL8 软件源，EL9 已移除）
+            depend_judge_rpm wget libaio numactl-libs ncurses-compat-libs
+        else
+            # glibc2.17 版本的 MySQL 只依赖 ncurses 6.x 的 .so.6，已由 ncurses-libs 提供，
+            # 不再请求 ncurses-compat-libs（EL9 软件源中无此包，之前会因此误报网络错误）
+            [[ "$GLIBC_VER" -eq 12 ]] && echo_log_warn "\033[33m当前系统软件源中没有 ncurses-compat-libs，glibc2.12 版本的 MySQL（如 5.7）依赖 libtinfo.so.5 可能无法启动，建议改用 MySQL 8.0.34+（glibc2.17）\033[0m"
+            depend_judge_rpm wget libaio numactl-libs
+        fi
     elif [[ "$ID" =~ (debian|ubuntu) ]]; then
-        depend_judge_dpkg wget libaio1 libncurses5 libnuma1
+        if [[ "$GLIBC_VER" -eq 12 ]]; then
+            depend_judge_dpkg wget libaio1 libncurses5 libnuma1
+        else
+            # glibc2.17 版本只依赖 ncurses 6.x 的 .so.6（libncurses6 已默认提供），
+            # Debian 12+/Ubuntu 24.04 软件源中已无 libncurses5，不在此请求
+            depend_judge_dpkg wget libaio1 libnuma1
+        fi
     fi
-    [ $? -ne 0 ] && echo_log_error "\033[31m安装依赖失败，请检查网络连接\033[0m"
+    [ $? -ne 0 ] && echo_log_error "\033[31m安装依赖失败\033[0m"
 
     echo_log_info "\033[32m开始安装 mysql ${MYSQL_VER}...\033[0m"
 
@@ -478,18 +545,33 @@ EOF
     else
         [ ! -d "$WORK_DIR" ] && mkdir -p "$WORK_DIR"
 
-        if [ ! -f "$WORK_DIR/$MYSQL_SOURCE" ]; then
+        # 缓存判断按当前版本的包名前缀扫描实际存在的文件（tar.gz/tar.xz 均可），
+        # 不依赖 $MYSQL_SOURCE 的历史值——check_url 失败探测曾使其残留错误的 .tar.gz 后缀，
+        # 导致磁盘上已有 .tar.xz 包时仍误判"不存在"而重复触发在线下载
+        local cached_pkg=""
+        for suffix in tar.gz tar.xz; do
+            [ -f "$WORK_DIR/${MYSQL_BASENAME}.${suffix}" ] && cached_pkg="${MYSQL_BASENAME}.${suffix}" && break
+        done
+
+        if [ -z "$cached_pkg" ]; then
             # 在线下载
             if check_url "$INTERNAL_MYSQL_BASE_URL"; then
                 echo_log_info "从内部源下载源码bin包 $MYSQL_URL"
-                wget -qP "$WORK_DIR" $MYSQL_URL &>/dev/null
+                wget -qP "$WORK_DIR" "$MYSQL_URL" &>/dev/null
             elif check_url "$EXTERNAL_MYSQL_BASE_URL"; then
                 echo_log_info "从外部源下载源码bin包 $MYSQL_URL"
-                wget -qP "$WORK_DIR" $MYSQL_URL &>/dev/null
+                wget -qP "$WORK_DIR" "$MYSQL_URL" &>/dev/null
             else
                 echo_log_error "\033[31m下载源码bin包失败,请检查内部源或外部源下载地址是否正确\033[0m"
             fi
+            # 下载后确认实际落盘的包并写回 MYSQL_SOURCE，wget 静默失败时立即报错
+            MYSQL_SOURCE=""
+            for suffix in tar.gz tar.xz; do
+                [ -f "$WORK_DIR/${MYSQL_BASENAME}.${suffix}" ] && MYSQL_SOURCE="${MYSQL_BASENAME}.${suffix}" && break
+            done
+            [ -z "$MYSQL_SOURCE" ] && echo_log_error "\033[31m下载源码bin包失败,请检查内部源或外部源下载地址是否正确\033[0m"
         else
+            MYSQL_SOURCE="$cached_pkg"
             echo_log_info "使用已下载的安装包: $MYSQL_SOURCE"
         fi
 
